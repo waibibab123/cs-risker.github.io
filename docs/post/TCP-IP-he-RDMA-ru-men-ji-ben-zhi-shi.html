@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html data-color-mode="light" data-dark-theme="dark" data-light-theme="light" lang="zh-CN">
+<head>
+    <meta content="text/html; charset=utf-8" http-equiv="content-type" />
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <link href='https://mirrors.sustech.edu.cn/cdnjs/ajax/libs/Primer/21.0.7/primer.css' rel='stylesheet' />
+    
+    <link rel="icon" href="https://avatars.githubusercontent.com/u/105782835?s=400&u=04c0291bd1e06b01ccad1d53388ed4a8a8894a53&v=4"><script>
+        let theme = localStorage.getItem("meek_theme") || "light";
+        document.documentElement.setAttribute("data-color-mode", theme);
+    </script>
+<meta name="description" content="# TCP/IP介绍
+**1.定义**：TCP/IP（Transmission Control Protocol/Internet Protocol）是一套用于互联网及局域网的**分层网络通信协议簇**，包含 TCP（传输层协议）和 IP（网络层协议），以及链路层、应用层等配套协议，是当前互联网的基础通信标准。">
+<meta property="og:title" content="TCP/IP和RDMA入门基本知识">
+<meta property="og:description" content="# TCP/IP介绍
+**1.定义**：TCP/IP（Transmission Control Protocol/Internet Protocol）是一套用于互联网及局域网的**分层网络通信协议簇**，包含 TCP（传输层协议）和 IP（网络层协议），以及链路层、应用层等配套协议，是当前互联网的基础通信标准。">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://waibibab-cs.github.io/post/TCP-IP-he-RDMA-ru-men-ji-ben-zhi-shi.html">
+<meta property="og:image" content="https://avatars.githubusercontent.com/u/105782835?s=400&u=04c0291bd1e06b01ccad1d53388ed4a8a8894a53&v=4">
+<title>TCP/IP和RDMA入门基本知识</title>
+
+
+
+</head>
+<style>
+body{box-sizing: border-box;min-width: 200px;max-width: 900px;margin: 20px auto;padding: 45px;font-size: 16px;font-family: sans-serif;line-height: 1.25;}
+#header{display:flex;padding-bottom:8px;border-bottom: 1px solid var(--borderColor-muted, var(--color-border-muted));margin-bottom: 16px;}
+#footer {margin-top:64px; text-align: center;font-size: small;}
+
+</style>
+
+<style>
+.postTitle{margin: auto 0;font-size:40px;font-weight:bold;}
+.title-right{display:flex;margin:auto 0 0 auto;}
+.title-right .circle{padding: 14px 16px;margin-right:8px;}
+#postBody{border-bottom: 1px solid var(--color-border-default);padding-bottom:36px;}
+#postBody hr{height:2px;}
+#cmButton{height:48px;margin-top:48px;}
+#comments{margin-top:64px;}
+.g-emoji{font-size:24px;}
+@media (max-width: 600px) {
+    body {padding: 8px;}
+    .postTitle{font-size:24px;}
+}
+
+</style>
+
+
+
+
+<body>
+    <div id="header">
+<h1 class="postTitle">TCP/IP和RDMA入门基本知识</h1>
+<div class="title-right">
+    <a href="https://waibibab-cs.github.io" id="buttonHome" class="btn btn-invisible circle" title="首页">
+        <svg class="octicon" width="16" height="16">
+            <path id="pathHome" fill-rule="evenodd"></path>
+        </svg>
+    </a>
+    
+    <a href="https://github.com/waibibab-cs/waibibab-cs.github.io/issues/6" target="_blank" class="btn btn-invisible circle" title="Issue">
+        <svg class="octicon" width="16" height="16">
+            <path id="pathIssue" fill-rule="evenodd"></path>
+        </svg>
+    </a>
+    
+
+    <a class="btn btn-invisible circle" onclick="modeSwitch();" title="切换主题">
+        <svg class="octicon" width="16" height="16" >
+            <path id="themeSwitch" fill-rule="evenodd"></path>
+        </svg>
+    </a>
+
+</div>
+</div>
+    <div id="content">
+<div class="markdown-body" id="postBody"><h1>TCP/IP介绍</h1>
+<p><strong>1.定义</strong>：TCP/IP（Transmission Control Protocol/Internet Protocol）是一套用于互联网及局域网的<strong>分层网络通信协议簇</strong>，包含 TCP（传输层协议）和 IP（网络层协议），以及链路层、应用层等配套协议，是当前互联网的基础通信标准。</p>
+<p><strong>2.核心特点</strong>：</p>
+<ul>
+<li><strong>可靠性保障</strong>：通过<strong>三次握手建立连接</strong>、<strong>四次挥手断开连接</strong>、序列号 / 确认应答（ACK）、重传机制、流量控制（滑动窗口）、拥塞控制（慢启动、拥塞避免）等机制，确保数据有序、无丢失、无重复传输。</li>
+<li><strong>分层处理</strong>：遵循 TCP/IP 五层模型（物理层、数据链路层、网络层、传输层、应用层），每层完成独立功能并向上层提供服务，例如：
+<ul>
+<li>IP 层负责<strong>路由寻址</strong>，将数据包从源主机转发到目标主机；</li>
+<li>TCP 层负责<strong>端到端的可靠传输</strong>，处理数据的分段、重组和可靠性校验。</li>
+</ul>
+</li>
+</ul>
+<ul>
+<li><strong>内核参与转发</strong>：数据传输时，需要经过操作系统内核的<strong>协议栈处理</strong>（如 TCP 头部解析、拥塞控制计算），再通过系统调用完成用户态与内核态的切换。</li>
+</ul>
+<p><strong>3.优缺点</strong>：</p>
+<ul>
+<li>优点：
+<ul>
+<li><strong>通用性强</strong>：支持所有网络拓扑和设备，是互联网的通用标准；</li>
+</ul>
+<ul>
+<li><strong>可靠性高</strong>：通过完整的校验和重传机制，适配复杂的公网环境；</li>
+<li><strong>兼容性好</strong>：几乎所有操作系统和网络设备都原生支持。</li>
+</ul>
+</li>
+</ul>
+<ul>
+<li>缺点：
+<ul>
+<li><strong>开销大</strong>：内核协议栈处理、用户态 / 内核态切换、TCP 头部校验等会产生显著延迟</li>
+<li><strong>CPU 占用高</strong>：协议栈的复杂计算会消耗大量 CPU 资源，难以满足超高吞吐和超低延迟场景</li>
+</ul>
+</li>
+</ul>
+<p><strong>4.应用场景：</strong> 适用于对通用性和可靠性要求高于极致性能的场景，例如互联网网页访问、远程登录（SSH）、文件传输（FTP）</p>
+<h1>RDMA介绍</h1>
+<p><strong>1.定义</strong>：RDMA（Remote Direct Memory Access，远程直接内存访问）是一种<strong>高性能网络通信技术</strong>，允许一台主机的应用程序直接访问另一台主机的内存，无需经过操作系统内核和 CPU 中转，从而实现超低延迟、高吞吐量的通信。</p>
+<p><strong>2.核心特点</strong>：</p>
+<ul>
+<li><strong>用户态直接通信</strong>：应用程序绕过内核协议栈，直接通过 RDMA 网卡（RNIC）完成数据传输，<strong>无用户态 / 内核态切换</strong></li>
+<li><strong>远程内存直接访问</strong>：通过<strong>内存注册</strong>和<strong>地址映射</strong>，本地应用可直接读写远端主机的内存区域，无需远端 CPU 参与数据拷贝</li>
+<li><strong>无连接 / 连接两种模式</strong>：其中可靠连接RC类似TCP的可靠传输，适用于关键业务；无连接UD类似UDP不可靠传输，适用于低延迟广播场景</li>
+<li><strong>硬件卸载</strong>：将通信协议的校验、封装、拥塞控制等操作<strong>卸载到 RDMA 网卡</strong>，释放主机 CPU 资源</li>
+</ul>
+<p><strong>3.优缺点：</strong></p>
+<ul>
+<li>优点：
+<ul>
+<li><strong>超低延迟</strong>：无内核中转和 CPU 参与，延迟可降至微秒级甚至亚微秒级</li>
+<li><strong>高吞吐量</strong>：硬件卸载和直接内存访问支持数十 Gbps 甚至上百 Gbps 的带宽</li>
+<li><strong>CPU 占用低</strong>：通信操作由网卡硬件完成，主机 CPU 可专注于业务计算</li>
+</ul>
+</li>
+<li>缺点：
+<ul>
+<li><strong>部署成本高</strong>：需要专用 RDMA 网卡和配套交换机（如 InfiniBand 交换机）</li>
+<li><strong>通用性差</strong>：不支持公网环境，主要用于数据中心内部</li>
+<li><strong>编程复杂度高</strong>：需要处理内存注册、队列管理等底层细节，开发门槛高于 TCP/IP</li>
+</ul>
+</li>
+</ul>
+<p><strong>4.应用场景</strong>：适用于对延迟和吞吐量有极致要求的高性能计算和数据中心场景，例如分布式存储、高性能计算、AI训练集群</p>
+<h1>通信流程案例</h1>
+<p>我们以<strong>A 主机应用程序向 B 主机内存写入数据</strong>为例，分别拆解 TCP/IP 和 RDMA 的完整通信流程，清晰呈现二者的核心差异</p>
+<h2>TCP/IP通信流程</h2>
+<p>TCP/IP 通信中，A 无法直接访问 B 的内存，需通过 “应用层数据交互 + 内核 / 用户态拷贝” 间接实现，整体流程分为<strong>连接建立、数据传输、连接断开</strong>三个阶段，涉及多层协议栈和多次内存拷贝。</p>
+<p><strong>step1.前期准备</strong>：<br>
+<strong>A主机</strong>：应用程序在用户态分配发送缓冲区，写入待传输数据，调用 <code class="notranslate">socket()</code> 接口创建 TCP 套接字，绑定端口并调用 <code class="notranslate">connect()</code> 发起连接请求</p>
+<p><strong>B主机</strong>：应用程序在用户态分配接收缓冲区，用于存储最终数据，调用 <code class="notranslate">socket()</code> 创建套接字，绑定端口后调用 <code class="notranslate">listen()</code> 监听连接，再调用 <code class="notranslate">accept()</code> 等待客户端连接</p>
+<p><strong>step2.建立连接</strong>：（TCP三次握手）<br>
+A 向 B 发送<strong>SYN 报文</strong>，请求建立连接、B 收到后回复<strong>SYN+ACK 报文</strong>，确认同步并同步自身序列号、A 再回复<strong>ACK 报文</strong>，TCP 连接正式建立。此阶段全程由内核协议栈处理，不涉及用户应用程序</p>
+<p><strong>step3.数据传输</strong>：<br>
+<strong>A 主机用户态→内核态拷贝</strong>：A 应用调用 <code class="notranslate">send()</code> 系统调用，将用户态发送缓冲区的数据拷贝到<strong>内核态的 TCP 发送缓冲区</strong>，触发用户态 / 内核态切换。</p>
+<p><strong>A 主机内核协议栈处理</strong>：内核对数据进行 TCP 分段、添加 TCP/IP 协议头、计算校验和，再将数据包传递到数据链路层，封装成以太网帧后通过网卡发送。</p>
+<p><strong>B 主机接收与协议栈处理</strong>：B 网卡收到以太网帧后，先传递到内核链路层，逐层剥离协议头（以太网→IP→TCP），校验通过后将数据存入<strong>内核态的 TCP 接收缓冲区</strong>。</p>
+<p><strong>B 主机内核态→用户态拷贝</strong>：B 应用调用 <code class="notranslate">recv()</code> 系统调用，触发用户态 / 内核态切换，内核将接收缓冲区的数据拷贝到应用的<strong>用户态接收缓冲区</strong>，完成数据写入。</p>
+<p><strong>step4.连接断开</strong>：<br>
+A 调用 <code class="notranslate">close()</code> 发送<strong>FIN 报文</strong>，请求断开连接、B 回复<strong>ACK 报文</strong>确认，同时自身若无数据发送则发送<strong>FIN 报文</strong>、1. A 回复<strong>ACK 报文</strong>，连接正式断开。</p>
+<h2>RDMA通信流程</h2>
+<p>RDMA 支持 A 应用<strong>绕过内核直接读写 B 的内存</strong>，以<strong>可靠连接（RC）模式</strong>为例，流程分为<strong>资源初始化、内存注册与授权、数据传输</strong>三个阶段，无内核中转和多余拷贝。</p>
+<p><strong>step1.前期准备</strong>：<br>
+A/B主机通用步骤：1. 初始化 RDMA 环境，加载 Verbs 驱动，获取 RDMA 网卡（RNIC）的设备上下文、2.创建<strong>保护域（PD）</strong>：隔离不同应用的 RDMA 资源，避免冲突、3.创建<strong>队列对（QP）</strong>：每个 QP 包含发送队列（SQ）和接收队列（RQ），用于收发 RDMA 指令 4.创建<strong>完成队列（CQ）</strong>：用于通知应用程序 RDMA 操作的完成状态</p>
+<p><strong>step2.内存注册与地址授权</strong><br>
+<strong>B主机</strong>：在用户态分配<strong>目标内存区域（MR）</strong>、调用 <code class="notranslate">ibv_reg_mr()</code> 注册该内存，RNIC 会锁定此内存区域（防止被系统换出），并生成<strong>内存键（rkey）</strong> 和 <strong>内存句柄（lkey）</strong> 、通过<strong>带外通道（如 TCP/IP 或共享配置）</strong>，将该内存的<strong>远程地址（VA）</strong>、<strong>内存长度</strong>和<strong>rkey</strong>发送给 A 主机（rkey 是 A 访问该内存的权限凭证）、调用 <code class="notranslate">ibv_modify_qp()</code> 将 QP 状态切换为 “可连接”，等待 A 建立 RDMA 连接</p>
+<p><strong>A主机</strong>：接收 B 发送的内存地址、长度和 rkey，保存到本地、调用 <code class="notranslate">ibv_modify_qp()</code> 向 B 发起 QP 连接请求，双方完成 RDMA 连接建立（类似 TCP 握手，但由硬件完成）</p>
+<p><strong>step3.数据传输</strong></p>
+<ol>
+<li><strong>A 主机构造 RDMA 写指令</strong>：A 应用在用户态构造<strong>RDMA_WRITE 请求</strong>，指定参数：本地待发送数据的内存地址和长度、B 主机的目标内存地址、rkey；将该请求提交到本地 QP 的发送队列（SQ）</li>
+<li><strong>RNIC 硬件执行传输</strong>：A 的 RNIC 直接读取本地用户态内存的数据，通过 RDMA 网络发送到 B 的 RNIC，全程<strong>无用户态 / 内核态切换</strong>，无主机 CPU 参与</li>
+<li><strong>B 主机 RNIC 写入内存</strong>：B 的 RNIC 收到数据后，通过 rkey 验证访问权限，直接将数据写入已注册的目标内存区域，无需 B 的 CPU 和内核介入</li>
+<li><strong>完成通知</strong>：B 的 RNIC 向 CQ 发送完成事件，B 应用通过轮询或中断感知到内存写入完成，可直接访问该内存数据</li>
+</ol>
+<p><strong>step4.后续清理</strong><br>
+通信结束后，双方调用接口释放 QP、PD、MR 等资源，断开 RDMA 连接</p>
+<h2>总体比较</h2>
+<p><a target="_blank" rel="noopener noreferrer nofollow" href="https://raw.githubusercontent.com/waibibab-cs/blog_img/main/cdnimg/20251211203244.png"><img src="https://raw.githubusercontent.com/waibibab-cs/blog_img/main/cdnimg/20251211203244.png" alt="image.png" style="max-width: 100%;"></a></p></div>
+<div style="font-size:small;margin-top:8px;float:right;"></div>
+
+<button class="btn btn-block" type="button" onclick="openComments()" id="cmButton">评论</button>
+<div class="comments" id="comments"></div>
+
+</div>
+    <div id="footer"><div id="footer1">Copyright © <span id="copyrightYear"></span> <a href="https://waibibab-cs.github.io">waibibab's blog</a></div>
+<div id="footer2">
+    <span id="runday"></span><span>Powered by <a href="https://meekdai.com/Gmeek.html" target="_blank">Gmeek</a></span>
+</div>
+
+<script>
+var now=new Date();
+document.getElementById("copyrightYear").innerHTML=now.getFullYear();
+
+if(""!=""){
+    var startSite=new Date("");
+    var diff=now.getTime()-startSite.getTime();
+    var diffDay=Math.floor(diff/(1000*60*60*24));
+    document.getElementById("runday").innerHTML="网站运行"+diffDay+"天"+" • ";
+}
+</script></div>
+</body>
+<script>
+var IconList={'sun': 'M8 10.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5zM8 12a4 4 0 100-8 4 4 0 000 8zM8 0a.75.75 0 01.75.75v1.5a.75.75 0 01-1.5 0V.75A.75.75 0 018 0zm0 13a.75.75 0 01.75.75v1.5a.75.75 0 01-1.5 0v-1.5A.75.75 0 018 13zM2.343 2.343a.75.75 0 011.061 0l1.06 1.061a.75.75 0 01-1.06 1.06l-1.06-1.06a.75.75 0 010-1.06zm9.193 9.193a.75.75 0 011.06 0l1.061 1.06a.75.75 0 01-1.06 1.061l-1.061-1.06a.75.75 0 010-1.061zM16 8a.75.75 0 01-.75.75h-1.5a.75.75 0 010-1.5h1.5A.75.75 0 0116 8zM3 8a.75.75 0 01-.75.75H.75a.75.75 0 010-1.5h1.5A.75.75 0 013 8zm10.657-5.657a.75.75 0 010 1.061l-1.061 1.06a.75.75 0 11-1.06-1.06l1.06-1.06a.75.75 0 011.06 0zm-9.193 9.193a.75.75 0 010 1.06l-1.06 1.061a.75.75 0 11-1.061-1.06l1.06-1.061a.75.75 0 011.061 0z', 'moon': 'M9.598 1.591a.75.75 0 01.785-.175 7 7 0 11-8.967 8.967.75.75 0 01.961-.96 5.5 5.5 0 007.046-7.046.75.75 0 01.175-.786zm1.616 1.945a7 7 0 01-7.678 7.678 5.5 5.5 0 107.678-7.678z', 'sync': 'M1.705 8.005a.75.75 0 0 1 .834.656 5.5 5.5 0 0 0 9.592 2.97l-1.204-1.204a.25.25 0 0 1 .177-.427h3.646a.25.25 0 0 1 .25.25v3.646a.25.25 0 0 1-.427.177l-1.38-1.38A7.002 7.002 0 0 1 1.05 8.84a.75.75 0 0 1 .656-.834ZM8 2.5a5.487 5.487 0 0 0-4.131 1.869l1.204 1.204A.25.25 0 0 1 4.896 6H1.25A.25.25 0 0 1 1 5.75V2.104a.25.25 0 0 1 .427-.177l1.38 1.38A7.002 7.002 0 0 1 14.95 7.16a.75.75 0 0 1-1.49.178A5.5 5.5 0 0 0 8 2.5Z', 'home': 'M6.906.664a1.749 1.749 0 0 1 2.187 0l5.25 4.2c.415.332.657.835.657 1.367v7.019A1.75 1.75 0 0 1 13.25 15h-3.5a.75.75 0 0 1-.75-.75V9H7v5.25a.75.75 0 0 1-.75.75h-3.5A1.75 1.75 0 0 1 1 13.25V6.23c0-.531.242-1.034.657-1.366l5.25-4.2Zm1.25 1.171a.25.25 0 0 0-.312 0l-5.25 4.2a.25.25 0 0 0-.094.196v7.019c0 .138.112.25.25.25H5.5V8.25a.75.75 0 0 1 .75-.75h3.5a.75.75 0 0 1 .75.75v5.25h2.75a.25.25 0 0 0 .25-.25V6.23a.25.25 0 0 0-.094-.195Z', 'github': 'M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z'};
+var utterancesLoad=0;
+
+let themeSettings={
+    "dark": ["dark","moon","#00f0ff","dark-blue"],
+    "light": ["light","sun","#ff5000","github-light"],
+    "auto": ["auto","sync","","preferred-color-scheme"]
+};
+function changeTheme(mode, icon, color, utheme){
+    document.documentElement.setAttribute("data-color-mode",mode);
+    document.getElementById("themeSwitch").setAttribute("d",value=IconList[icon]);
+    document.getElementById("themeSwitch").parentNode.style.color=color;
+    if(utterancesLoad==1){utterancesTheme(utheme);}
+}
+function modeSwitch(){
+    let currentMode=document.documentElement.getAttribute('data-color-mode');
+    let newMode = currentMode === "light" ? "dark" : currentMode === "dark" ? "auto" : "light";
+    localStorage.setItem("meek_theme", newMode);
+    if(themeSettings[newMode]){
+        changeTheme(...themeSettings[newMode]);
+    }
+}
+function utterancesTheme(theme){
+    const message={type:'set-theme',theme: theme};
+    const iframe=document.getElementsByClassName('utterances-frame')[0];
+    iframe.contentWindow.postMessage(message,'https://utteranc.es');
+}
+if(themeSettings[theme]){changeTheme(...themeSettings[theme]);}
+console.log("\n %c Gmeek last https://github.com/Meekdai/Gmeek \n","padding:5px 0;background:#02d81d;color:#fff");
+</script>
+
+<script>
+document.getElementById("pathHome").setAttribute("d",IconList["home"]);
+document.getElementById("pathIssue").setAttribute("d",IconList["github"]);
+
+
+
+function openComments(){
+    cm=document.getElementById("comments");
+    cmButton=document.getElementById("cmButton");
+    cmButton.innerHTML="loading";
+    span=document.createElement("span");
+    span.setAttribute("class","AnimatedEllipsis");
+    cmButton.appendChild(span);
+
+    script=document.createElement("script");
+    script.setAttribute("src","https://utteranc.es/client.js");
+    script.setAttribute("repo","waibibab-cs/waibibab-cs.github.io");
+    script.setAttribute("issue-term","title");
+    
+    if(localStorage.getItem("meek_theme")=="dark"){script.setAttribute("theme","dark-blue");}
+    else if(localStorage.getItem("meek_theme")=="light") {script.setAttribute("theme","github-light");}
+    else{script.setAttribute("theme","preferred-color-scheme");}
+    
+    script.setAttribute("crossorigin","anonymous");
+    script.setAttribute("async","");
+    cm.appendChild(script);
+
+    int=self.setInterval("iFrameLoading()",200);
+}
+
+function iFrameLoading(){
+    var utterances=document.getElementsByClassName('utterances');
+    if(utterances.length==1){
+        if(utterances[0].style.height!=""){
+            utterancesLoad=1;
+            int=window.clearInterval(int);
+            document.getElementById("cmButton").style.display="none";
+            console.log("utterances Load OK");
+        }
+    }
+}
+
+
+
+</script>
+
+
+</html>
