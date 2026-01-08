@@ -10,10 +10,12 @@
         let theme = localStorage.getItem("meek_theme") || "light";
         document.documentElement.setAttribute("data-color-mode", theme);
     </script>
-<meta name="description" content="# 摘要
+<meta name="description" content="论文全称：REIS: A High-Performance and Energy-Efficient Retrieval System with In-Storage Processing
+# 摘要
 大型语言模型（LLMs）面临一个固有难题：其知识被局限在训练数据范围内，这一限制加上高昂的重训练成本，使其无法提供实时更新的响应。">
 <meta property="og:title" content="【论文阅读;ISCA'25】REIS：一种高性能、高能效的存内检索系统">
-<meta property="og:description" content="# 摘要
+<meta property="og:description" content="论文全称：REIS: A High-Performance and Energy-Efficient Retrieval System with In-Storage Processing
+# 摘要
 大型语言模型（LLMs）面临一个固有难题：其知识被局限在训练数据范围内，这一限制加上高昂的重训练成本，使其无法提供实时更新的响应。">
 <meta property="og:type" content="article">
 <meta property="og:url" content="https://waibibab-cs.github.io/post/%E3%80%90-lun-wen-yue-du-%3BISCA%2725%E3%80%91REIS%EF%BC%9A-yi-zhong-gao-xing-neng-%E3%80%81-gao-neng-xiao-de-cun-nei-jian-suo-xi-tong.html">
@@ -75,7 +77,8 @@ body{box-sizing: border-box;min-width: 200px;max-width: 900px;margin: 20px auto;
 </div>
 </div>
     <div id="content">
-<div class="markdown-body" id="postBody"><h1>摘要</h1>
+<div class="markdown-body" id="postBody"><p>论文全称：REIS: A High-Performance and Energy-Efficient Retrieval System with In-Storage Processing</p>
+<h1>摘要</h1>
 <p>大型语言模型（LLMs）面临一个固有难题：其知识被局限在训练数据范围内，这一限制加上高昂的重训练成本，使其无法提供实时更新的响应。为解决这些问题，检索增强生成（RAG）技术通过外部知识库对 LLMs 基于静态训练的知识进行了补充，RAG 包含三个阶段：（i）索引阶段，构建数据库以实现文本嵌入的相似度检索；（ii）检索阶段，根据用户查询从数据库中搜索并获取相关数据；（iii）生成阶段，结合用户查询与检索到的数据生成响应。<br>
 其中 RAG 的检索阶段是推理流水线中的关键性能瓶颈，该阶段包含两个步骤：（i）将用户查询映射为嵌入向量；（ii）通过近似最近邻搜索（ANNS）算法在数据库中查找语义最相似的嵌入向量以定位相关内容，由于数据库规模庞大，ANNS 会在主机与存储系统之间产生巨大的数据移动开销。<br>
 为缓解这一问题，已有研究提出了存储内处理（ISP）技术，通过在存储系统内部执行计算来加速 ANNS 负载，但现有基于 ISP 的 ANNS 方案存在以下局限：（i）所采用的算法并非针对 ISP 系统定制；（ii）未对 ANNS 筛选之后的其它操作进行加速；（iii）对存储系统进行了大量硬件改造，既限制了性能也阻碍了实际落地。<br>
