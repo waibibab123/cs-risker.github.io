@@ -1,0 +1,455 @@
+<!DOCTYPE html>
+<html data-color-mode="light" data-dark-theme="dark" data-light-theme="light" lang="zh-CN">
+<head>
+    <meta content="text/html; charset=utf-8" http-equiv="content-type" />
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <link href='https://mirrors.sustech.edu.cn/cdnjs/ajax/libs/Primer/21.0.7/primer.css' rel='stylesheet' />
+    
+    <link rel="icon" href="https://avatars.githubusercontent.com/u/105782835?s=400&u=04c0291bd1e06b01ccad1d53388ed4a8a8894a53&v=4"><script>
+        let theme = localStorage.getItem("meek_theme") || "light";
+        document.documentElement.setAttribute("data-color-mode", theme);
+    </script>
+<meta name="description" content="# 前言
+本文章为阅读《Linux高性能服务器编程》第八章.高性能服务器程序框架中第四小节：两种高效的事件处理模式。">
+<meta property="og:title" content="Reactor模式和Proactor模式简单介绍">
+<meta property="og:description" content="# 前言
+本文章为阅读《Linux高性能服务器编程》第八章.高性能服务器程序框架中第四小节：两种高效的事件处理模式。">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://waibibab-cs.github.io/post/Reactor-mo-shi-he-Proactor-mo-shi-jian-dan-jie-shao.html">
+<meta property="og:image" content="https://avatars.githubusercontent.com/u/105782835?s=400&u=04c0291bd1e06b01ccad1d53388ed4a8a8894a53&v=4">
+<title>Reactor模式和Proactor模式简单介绍</title>
+
+
+
+</head>
+<style>
+body{box-sizing: border-box;min-width: 200px;max-width: 900px;margin: 20px auto;padding: 45px;font-size: 16px;font-family: sans-serif;line-height: 1.25;}
+#header{display:flex;padding-bottom:8px;border-bottom: 1px solid var(--borderColor-muted, var(--color-border-muted));margin-bottom: 16px;}
+#footer {margin-top:64px; text-align: center;font-size: small;}
+
+</style>
+
+<style>
+.postTitle{margin: auto 0;font-size:40px;font-weight:bold;}
+.title-right{display:flex;margin:auto 0 0 auto;}
+.title-right .circle{padding: 14px 16px;margin-right:8px;}
+#postBody{border-bottom: 1px solid var(--color-border-default);padding-bottom:36px;}
+#postBody hr{height:2px;}
+#cmButton{height:48px;margin-top:48px;}
+#comments{margin-top:64px;}
+.g-emoji{font-size:24px;}
+@media (max-width: 600px) {
+    body {padding: 8px;}
+    .postTitle{font-size:24px;}
+}
+
+</style>
+
+
+
+
+<body>
+    <div id="header">
+<h1 class="postTitle">Reactor模式和Proactor模式简单介绍</h1>
+<div class="title-right">
+    <a href="https://waibibab-cs.github.io" id="buttonHome" class="btn btn-invisible circle" title="首页">
+        <svg class="octicon" width="16" height="16">
+            <path id="pathHome" fill-rule="evenodd"></path>
+        </svg>
+    </a>
+    
+    <a href="https://github.com/waibibab-cs/waibibab-cs.github.io/issues/15" target="_blank" class="btn btn-invisible circle" title="Issue">
+        <svg class="octicon" width="16" height="16">
+            <path id="pathIssue" fill-rule="evenodd"></path>
+        </svg>
+    </a>
+    
+
+    <a class="btn btn-invisible circle" onclick="modeSwitch();" title="切换主题">
+        <svg class="octicon" width="16" height="16" >
+            <path id="themeSwitch" fill-rule="evenodd"></path>
+        </svg>
+    </a>
+
+</div>
+</div>
+    <div id="content">
+<div class="markdown-body" id="postBody"><h1>前言</h1>
+<p>本文章为阅读《Linux高性能服务器编程》第八章.高性能服务器程序框架中第四小节：两种高效的事件处理模式。</p>
+<h1>Reactor模式</h1>
+<p>一、 什么是 Reactor 模式？<br>
+Reactor 翻译为“反应堆”或“反应器”。它是一种<strong>事件驱动</strong>的设计模式。</p>
+<ul>
+<li><strong>核心思想</strong>：主线程只负责<strong>监听</strong>（响应事件），不负责<strong>执行</strong>（业务处理）。</li>
+<li><strong>分工明确</strong>：将 I/O 事件的处理单元与逻辑处理单元分离，实现解耦。<br>
+二、 角色定位</li>
+</ul>
+<markdown-accessiblity-table><table role="table">
+<thead>
+<tr>
+<th>角色</th>
+<th>职能 (任务内容)</th>
+<th>备注</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>主线程 (I/O 处理单元)</strong></td>
+<td>调用 <code class="notranslate">epoll_wait</code> 等待事件触发；将就绪的 Socket <strong>插入请求队列</strong>。</td>
+<td>不读写数据，不处理业务。</td>
+</tr>
+<tr>
+<td><strong>请求队列</strong></td>
+<td>存储就绪任务的缓冲区，连接 I/O 单元与逻辑单元的纽带。</td>
+<td>典型的生产者-消费者模型。</td>
+</tr>
+<tr>
+<td><strong>工作线程 (逻辑单元)</strong></td>
+<td>从队列中取出任务；<strong>读数据 (Read)</strong> -&gt; <strong>逻辑处理 (Process)</strong> -&gt; <strong>写数据 (Write)</strong> 。</td>
+<td>真正干重活的地方。</td>
+</tr>
+</tbody>
+</table></markdown-accessiblity-table>
+<p>三、 Reactor 模式的工作流程 (同步 I/O 实现版)<br>
+<a target="_blank" rel="noopener noreferrer nofollow" href="https://raw.githubusercontent.com/waibibab-cs/blog_img/main/cdnimg/20260119223245.png"><img src="https://raw.githubusercontent.com/waibibab-cs/blog_img/main/cdnimg/20260119223245.png" alt="image.png" style="max-width: 100%;"></a><br>
+以图片中的典型流程为例：</p>
+<ol>
+<li><strong>注册与监听</strong>：主线程往 <code class="notranslate">epoll</code> 事件表中注册 Socket 的<strong>读就绪</strong>事件。</li>
+<li><strong>就绪分发</strong>：当 Socket 有数据可读，<code class="notranslate">epoll_wait</code> 通知主线程，主线程将该事件放入<strong>请求队列</strong>。</li>
+<li><strong>读处理</strong>：
+<ul>
+<li>某个睡眠的工作线程被唤醒。</li>
+<li>工作线程从 Socket <strong>读取数据</strong>。</li>
+<li>工作线程处理客户请求（逻辑计算）。</li>
+<li>处理完后，工作线程往 <code class="notranslate">epoll</code> 中注册该 Socket 的<strong>写就绪</strong>事件。</li>
+</ul>
+</li>
+<li><strong>写处理</strong>：
+<ul>
+<li>当 Socket 可写时，<code class="notranslate">epoll_wait</code> 再次通知主线程。</li>
+<li>主线程将该写事件放入请求队列。</li>
+<li>工作线程被唤醒，往 Socket <strong>写入结果</strong>。</li>
+</ul>
+</li>
+</ol>
+<p>四、 核心设计要点</p>
+<ol>
+<li>读写操作的位置<br>
+在 Reactor 模式中，<strong>读写数据是由工作线程完成的</strong>。</li>
+</ol>
+<ul>
+<li>这一点区分了它与 Proactor 模式（Proactor 模式下，读写是由内核完成并通知程序结果的）</li>
+</ul>
+<ol start="2">
+<li>线程无差别化<br>
+如图片末尾所言： Reactor 模式中，没有必要区分专门的“读线程”和“写线程”。</li>
+</ol>
+<ul>
+<li>工作线程从队列取出事件后，<strong>根据事件类型（读或写）</strong> 来决定具体的执行动作。这种设计提高了线程的复用率和系统的灵活性。</li>
+</ul>
+<ol start="3">
+<li>与 <code class="notranslate">EPOLLONESHOT</code> 的联动 (进阶要点)<br>
+在多线程 Reactor 模型中：</li>
+</ol>
+<ul>
+<li>当一个工作线程在处理某个请求时，主线程应通过 <code class="notranslate">EPOLLONESHOT</code> 确保该 Socket 不会被其他工作线程同时抢占。</li>
+<li>工作线程处理完毕并重置事件后，该 Socket 才能再次进入下一轮的 Reactor 流程。<br>
+五、 优缺点总结</li>
+<li><strong>优点</strong>：
+<ul>
+<li><strong>高并发管理</strong>：主线程专注于 I/O 调度，能同时处理成千上万个连接。</li>
+<li><strong>响应快</strong>：避免了 I/O 阻塞导致逻辑线程闲置。</li>
+<li><strong>扩展性好</strong>：可以根据业务压力动态调整工作线程池的大小。</li>
+</ul>
+</li>
+<li><strong>缺点</strong>：
+<ul>
+<li><strong>主线程压力</strong>：如果 I/O 任务极其频繁（例如大量小包），主线程分发任务可能成为瓶颈。</li>
+</ul>
+</li>
+</ul>
+<h1>Proactor模式</h1>
+<p>一、 什么是 Proactor 模式？<br>
+Proactor 模式是一种<strong>异步 I/O 模式</strong>。</p>
+<ul>
+<li><strong>核心思想</strong>：所有的 I/O 操作（读和写）都交给<strong>主线程和内核</strong>来处理。</li>
+<li><strong>职责纯粹</strong>：工作线程（逻辑单元）<strong>仅负责业务逻辑</strong>，完全不参与 I/O 读取和写入的操作。</li>
+<li><strong>实现依赖</strong>：通常需要异步 I/O 模型（如 Linux 下的 <code class="notranslate">aio_read</code> / <code class="notranslate">aio_write</code>）的支持。<br>
+二、 角色分工</li>
+</ul>
+<markdown-accessiblity-table><table role="table">
+<thead>
+<tr>
+<th>角色</th>
+<th>职能 (任务内容)</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>主线程 / 内核</strong></td>
+<td>负责 I/O 监控、<strong>数据的实际读取和发送</strong>。</td>
+</tr>
+<tr>
+<td><strong>用户缓冲区</strong></td>
+<td>在读写前由应用程序指定，内核直接将结果放入或取出。</td>
+</tr>
+<tr>
+<td><strong>信号处理函数 / 回调机制</strong></td>
+<td>当内核完成 I/O 后，通知应用程序。</td>
+</tr>
+<tr>
+<td><strong>工作线程 (逻辑单元)</strong></td>
+<td>仅从缓冲区拿到<strong>已经读好</strong>的数据进行业务计算，或者准备好数据交给内核去发。</td>
+</tr>
+</tbody>
+</table></markdown-accessiblity-table>
+<p>三、 Proactor 模式的工作流程 (以 <code class="notranslate">aio</code> 为例)<br>
+<a target="_blank" rel="noopener noreferrer nofollow" href="https://raw.githubusercontent.com/waibibab-cs/blog_img/main/cdnimg/20260119224411.png"><img src="https://raw.githubusercontent.com/waibibab-cs/blog_img/main/cdnimg/20260119224411.png" alt="image.png" style="max-width: 100%;"></a><strong>读操作流程</strong></p>
+<ol>
+<li><strong>注册与预告</strong>：主线程调用 <code class="notranslate">aio_read</code>。不仅告诉内核要盯住哪个 Socket，还告诉内核：<strong>“这是我准备好的缓冲区地址，写完了记得用信号（或回调）通知我。”</strong></li>
+<li><strong>静默执行</strong>：主线程继续处理其他事情。<strong>内核</strong>负责等待数据到达，并将数据自动拷贝到用户指定的缓冲区。</li>
+<li><strong>完成通知</strong>：数据进缓冲区后，内核发送信号。</li>
+<li><strong>业务处理</strong>：应用程序预先定义的信号处理函数（或其他机制）<strong>选择一个工作线程</strong>。工作线程直接操作缓冲区内的现成数据。</li>
+</ol>
+<p><strong>写操作流程</strong></p>
+<ol>
+<li><strong>提交请求</strong>：工作线程处理完逻辑后，调用 <code class="notranslate">aio_write</code>，告诉内核缓冲区位置。</li>
+<li><strong>异步发送</strong>：主线程/内核负责将缓冲区数据发送出去。</li>
+<li><strong>后续扫尾</strong>：内核发送信号通知写操作完成。应用程序调用工作线程进行善后（如关闭连接）。</li>
+</ol>
+<p>四、 Reactor vs Proactor (核心区别回顾)</p>
+<markdown-accessiblity-table><table role="table">
+<thead>
+<tr>
+<th>特性</th>
+<th>Reactor</th>
+<th>Proactor</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>I/O 类型</strong></td>
+<td>主要是同步 I/O（如 epoll）</td>
+<td>异步 I/O（如 aio）</td>
+</tr>
+<tr>
+<td><strong>谁负责读写数据？</strong></td>
+<td><strong>工作线程</strong> (调用 <code class="notranslate">recv/send</code>)</td>
+<td><strong>内核/主线程</strong> (完成后由内核通知)</td>
+</tr>
+<tr>
+<td><strong>通知时机</strong></td>
+<td><strong>I/O 就绪</strong>（可以读了）</td>
+<td><strong>I/O 完成</strong>（已经读完了）</td>
+</tr>
+<tr>
+<td><strong>编程难度</strong></td>
+<td>相对较低，容易实现</td>
+<td>高（对异步 I/O API 的稳定性要求高）</td>
+</tr>
+</tbody>
+</table></markdown-accessiblity-table>
+<p>五、 总结</p>
+<ul>
+<li><strong>Reactor</strong> 是“来了活，你（工作线程）快去干（读/写）”。</li>
+<li><strong>Proactor</strong> 是“活干完（读完/写完）了，你（工作线程）来处理结果”。<br>
+Proactor 模式在理论上拥有更高的效率，因为它最大限度地利用了内核的异步处理能力，减少了应用层在读写过程中的等待。</li>
+</ul>
+<h1>同步I/O模拟Proactor</h1>
+<p>一、 核心思想<br>
+在模拟 Proactor 模式中，主线程不仅负责 I/O 监控，还<strong>亲自负责数据的读取和写入</strong>。</p>
+<ul>
+<li><strong>对工作线程而言</strong>：它看到的永远是“现成”的结果。它不需要调用 <code class="notranslate">recv</code> 或 <code class="notranslate">send</code>，只需要处理已经读到内存里的业务数据。</li>
+<li><strong>模拟的本质</strong>：主线程通过同步 I/O 完成读写，然后向工作线程发送“完成通知”，从而在逻辑上实现了 Proactor 的“异步内味儿”。<br>
+二、 角色职责划分</li>
+</ul>
+<markdown-accessiblity-table><table role="table">
+<thead>
+<tr>
+<th>角色</th>
+<th>负责的任务</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>主线程</strong></td>
+<td>1. 使用 <code class="notranslate">epoll_wait</code> 监听事件。<br>2. <strong>读数据</strong>：就绪后循环读取直到无数据，封装成请求包。<br>3. <strong>写数据</strong>：逻辑处理完后，亲自将结果写入 Socket。</td>
+</tr>
+<tr>
+<td><strong>请求队列</strong></td>
+<td>存放主线程已经读好的“请求对象”，等待工作线程取走。</td>
+</tr>
+<tr>
+<td><strong>工作线程</strong></td>
+<td><strong>纯逻辑处理</strong>：从队列取包 -&gt; 逻辑运算 -&gt; 处理结果重新交回主线程。</td>
+</tr>
+<tr>
+<td>三、 详细工作流程（以 <code class="notranslate">epoll</code> 为例）</td>
+<td></td>
+</tr>
+<tr>
+<td><a target="_blank" rel="noopener noreferrer nofollow" href="https://raw.githubusercontent.com/waibibab-cs/blog_img/main/cdnimg/20260119225707.png"><img src="https://raw.githubusercontent.com/waibibab-cs/blog_img/main/cdnimg/20260119225707.png" alt="image.png" style="max-width: 100%;"></a></td>
+<td></td>
+</tr>
+</tbody>
+</table></markdown-accessiblity-table>
+<p><strong>读事件处理流程</strong></p>
+<ol>
+<li><strong>注册</strong>：主线程向 <code class="notranslate">epoll</code> 注册 Socket 的<strong>读就绪</strong>事件。</li>
+<li><strong>监听</strong>：调用 <code class="notranslate">epoll_wait</code> 等待就绪。</li>
+<li><strong>主线程读取</strong>：当数据可读时，<strong>主线程</strong>循环读取 Socket 数据，直到缓冲区空。</li>
+<li><strong>分发任务</strong>：主线程将读到的数据封装成“请求对象”，插入<strong>请求队列</strong>。</li>
+<li><strong>业务加工</strong>：工作线程被唤醒，从队列取出对象，执行业务逻辑。</li>
+</ol>
+<p><strong>写事件处理流程</strong></p>
+<ol>
+<li><strong>注册写事件</strong>：工作线程处理完逻辑后，向 <code class="notranslate">epoll</code> 注册该 Socket 的<strong>写就绪</strong>事件。</li>
+<li><strong>监听可写</strong>：主线程调用 <code class="notranslate">epoll_wait</code> 发现 Socket 可写。</li>
+<li><strong>主线程写入</strong>：<strong>主线程</strong>亲自将处理后的结果写入 Socket，发送给客户。</li>
+<li><strong>扫尾</strong>：决定是否关闭连接或重置状态。</li>
+</ol>
+<p>四、 关键点对比：模拟 Proactor vs. Reactor</p>
+<markdown-accessiblity-table><table role="table">
+<thead>
+<tr>
+<th>模式</th>
+<th>谁负责 <code class="notranslate">read/write</code>？</th>
+<th>通知内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Reactor</strong></td>
+<td><strong>工作线程</strong></td>
+<td>“缓冲区有数据了，你自己来读”</td>
+</tr>
+<tr>
+<td><strong>模拟 Proactor</strong></td>
+<td><strong>主线程</strong></td>
+<td>“数据我已经帮你读好了，你直接处理”</td>
+</tr>
+</tbody>
+</table></markdown-accessiblity-table>
+<p>五、 为什么叫“模拟”？</p>
+<ul>
+<li><strong>真正的 Proactor</strong>：读取动作是由 <strong>操作系统内核（Kernel）</strong> 通过异步 I/O（如 <code class="notranslate">io_uring</code>）完成的。</li>
+<li><strong>模拟的 Proactor</strong>：读取动作是由 <strong>用户态的主线程</strong> 通过同步 I/O（<code class="notranslate">read/write</code>）完成的。</li>
+</ul>
+<p>六、 优缺点总结</p>
+<ul>
+<li><strong>优点</strong>：
+<ul>
+<li>结构清晰，工作线程负载均衡，不被 I/O 等待卡住。</li>
+<li>相比真正的异步 I/O，这种方式不依赖于操作系统复杂的 AIO 支持，兼容性极强。</li>
+</ul>
+</li>
+<li><strong>缺点</strong>：
+<ul>
+<li><strong>主线程压力极大</strong>：主线程除了监听连接，还要负责所有 Socket 的数据拷贝，如果并发极大且包体较大，主线程可能成为性能瓶颈。</li>
+</ul>
+</li>
+</ul></div>
+<div style="font-size:small;margin-top:8px;float:right;"></div>
+
+<button class="btn btn-block" type="button" onclick="openComments()" id="cmButton">评论</button>
+<div class="comments" id="comments"></div>
+
+</div>
+    <div id="footer"><div id="footer1">Copyright © <span id="copyrightYear"></span> <a href="https://waibibab-cs.github.io">waibibab's blog</a></div>
+<div id="footer2">
+    <span id="runday"></span><span>Powered by <a href="https://meekdai.com/Gmeek.html" target="_blank">Gmeek</a></span>
+</div>
+
+<script>
+var now=new Date();
+document.getElementById("copyrightYear").innerHTML=now.getFullYear();
+
+if(""!=""){
+    var startSite=new Date("");
+    var diff=now.getTime()-startSite.getTime();
+    var diffDay=Math.floor(diff/(1000*60*60*24));
+    document.getElementById("runday").innerHTML="网站运行"+diffDay+"天"+" • ";
+}
+</script></div>
+</body>
+<script>
+var IconList={'sun': 'M8 10.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5zM8 12a4 4 0 100-8 4 4 0 000 8zM8 0a.75.75 0 01.75.75v1.5a.75.75 0 01-1.5 0V.75A.75.75 0 018 0zm0 13a.75.75 0 01.75.75v1.5a.75.75 0 01-1.5 0v-1.5A.75.75 0 018 13zM2.343 2.343a.75.75 0 011.061 0l1.06 1.061a.75.75 0 01-1.06 1.06l-1.06-1.06a.75.75 0 010-1.06zm9.193 9.193a.75.75 0 011.06 0l1.061 1.06a.75.75 0 01-1.06 1.061l-1.061-1.06a.75.75 0 010-1.061zM16 8a.75.75 0 01-.75.75h-1.5a.75.75 0 010-1.5h1.5A.75.75 0 0116 8zM3 8a.75.75 0 01-.75.75H.75a.75.75 0 010-1.5h1.5A.75.75 0 013 8zm10.657-5.657a.75.75 0 010 1.061l-1.061 1.06a.75.75 0 11-1.06-1.06l1.06-1.06a.75.75 0 011.06 0zm-9.193 9.193a.75.75 0 010 1.06l-1.06 1.061a.75.75 0 11-1.061-1.06l1.06-1.061a.75.75 0 011.061 0z', 'moon': 'M9.598 1.591a.75.75 0 01.785-.175 7 7 0 11-8.967 8.967.75.75 0 01.961-.96 5.5 5.5 0 007.046-7.046.75.75 0 01.175-.786zm1.616 1.945a7 7 0 01-7.678 7.678 5.5 5.5 0 107.678-7.678z', 'sync': 'M1.705 8.005a.75.75 0 0 1 .834.656 5.5 5.5 0 0 0 9.592 2.97l-1.204-1.204a.25.25 0 0 1 .177-.427h3.646a.25.25 0 0 1 .25.25v3.646a.25.25 0 0 1-.427.177l-1.38-1.38A7.002 7.002 0 0 1 1.05 8.84a.75.75 0 0 1 .656-.834ZM8 2.5a5.487 5.487 0 0 0-4.131 1.869l1.204 1.204A.25.25 0 0 1 4.896 6H1.25A.25.25 0 0 1 1 5.75V2.104a.25.25 0 0 1 .427-.177l1.38 1.38A7.002 7.002 0 0 1 14.95 7.16a.75.75 0 0 1-1.49.178A5.5 5.5 0 0 0 8 2.5Z', 'home': 'M6.906.664a1.749 1.749 0 0 1 2.187 0l5.25 4.2c.415.332.657.835.657 1.367v7.019A1.75 1.75 0 0 1 13.25 15h-3.5a.75.75 0 0 1-.75-.75V9H7v5.25a.75.75 0 0 1-.75.75h-3.5A1.75 1.75 0 0 1 1 13.25V6.23c0-.531.242-1.034.657-1.366l5.25-4.2Zm1.25 1.171a.25.25 0 0 0-.312 0l-5.25 4.2a.25.25 0 0 0-.094.196v7.019c0 .138.112.25.25.25H5.5V8.25a.75.75 0 0 1 .75-.75h3.5a.75.75 0 0 1 .75.75v5.25h2.75a.25.25 0 0 0 .25-.25V6.23a.25.25 0 0 0-.094-.195Z', 'github': 'M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z'};
+var utterancesLoad=0;
+
+let themeSettings={
+    "dark": ["dark","moon","#00f0ff","dark-blue"],
+    "light": ["light","sun","#ff5000","github-light"],
+    "auto": ["auto","sync","","preferred-color-scheme"]
+};
+function changeTheme(mode, icon, color, utheme){
+    document.documentElement.setAttribute("data-color-mode",mode);
+    document.getElementById("themeSwitch").setAttribute("d",value=IconList[icon]);
+    document.getElementById("themeSwitch").parentNode.style.color=color;
+    if(utterancesLoad==1){utterancesTheme(utheme);}
+}
+function modeSwitch(){
+    let currentMode=document.documentElement.getAttribute('data-color-mode');
+    let newMode = currentMode === "light" ? "dark" : currentMode === "dark" ? "auto" : "light";
+    localStorage.setItem("meek_theme", newMode);
+    if(themeSettings[newMode]){
+        changeTheme(...themeSettings[newMode]);
+    }
+}
+function utterancesTheme(theme){
+    const message={type:'set-theme',theme: theme};
+    const iframe=document.getElementsByClassName('utterances-frame')[0];
+    iframe.contentWindow.postMessage(message,'https://utteranc.es');
+}
+if(themeSettings[theme]){changeTheme(...themeSettings[theme]);}
+console.log("\n %c Gmeek last https://github.com/Meekdai/Gmeek \n","padding:5px 0;background:#02d81d;color:#fff");
+</script>
+
+<script>
+document.getElementById("pathHome").setAttribute("d",IconList["home"]);
+document.getElementById("pathIssue").setAttribute("d",IconList["github"]);
+
+
+
+function openComments(){
+    cm=document.getElementById("comments");
+    cmButton=document.getElementById("cmButton");
+    cmButton.innerHTML="loading";
+    span=document.createElement("span");
+    span.setAttribute("class","AnimatedEllipsis");
+    cmButton.appendChild(span);
+
+    script=document.createElement("script");
+    script.setAttribute("src","https://utteranc.es/client.js");
+    script.setAttribute("repo","waibibab-cs/waibibab-cs.github.io");
+    script.setAttribute("issue-term","title");
+    
+    if(localStorage.getItem("meek_theme")=="dark"){script.setAttribute("theme","dark-blue");}
+    else if(localStorage.getItem("meek_theme")=="light") {script.setAttribute("theme","github-light");}
+    else{script.setAttribute("theme","preferred-color-scheme");}
+    
+    script.setAttribute("crossorigin","anonymous");
+    script.setAttribute("async","");
+    cm.appendChild(script);
+
+    int=self.setInterval("iFrameLoading()",200);
+}
+
+function iFrameLoading(){
+    var utterances=document.getElementsByClassName('utterances');
+    if(utterances.length==1){
+        if(utterances[0].style.height!=""){
+            utterancesLoad=1;
+            int=window.clearInterval(int);
+            document.getElementById("cmButton").style.display="none";
+            console.log("utterances Load OK");
+        }
+    }
+}
+
+
+
+</script>
+
+
+</html>
