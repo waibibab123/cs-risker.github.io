@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html data-color-mode="light" data-dark-theme="dark" data-light-theme="light" lang="zh-CN">
+<head>
+    <meta content="text/html; charset=utf-8" http-equiv="content-type" />
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <link href='https://mirrors.sustech.edu.cn/cdnjs/ajax/libs/Primer/21.0.7/primer.css' rel='stylesheet' />
+    
+    <link rel="icon" href="https://avatars.githubusercontent.com/u/105782835?s=400&u=04c0291bd1e06b01ccad1d53388ed4a8a8894a53&v=4"><script>
+        let theme = localStorage.getItem("meek_theme") || "light";
+        document.documentElement.setAttribute("data-color-mode", theme);
+    </script>
+<meta name="description" content="论文全名：LSM-VEC: A Large-Scale Disk-Based System for Dynamic Vector Search
+# 摘要
+向量搜索通过支持高维嵌入上的近似最近邻（ANN）查询，构成了现代 AI 应用的基础，涵盖了检索增强生成（RAG）、推荐系统和多模态搜索等任务。">
+<meta property="og:title" content="【论文阅读;SOSP'25】LSM-VEC：一种基于磁盘的动态向量搜索系统">
+<meta property="og:description" content="论文全名：LSM-VEC: A Large-Scale Disk-Based System for Dynamic Vector Search
+# 摘要
+向量搜索通过支持高维嵌入上的近似最近邻（ANN）查询，构成了现代 AI 应用的基础，涵盖了检索增强生成（RAG）、推荐系统和多模态搜索等任务。">
+<meta property="og:type" content="article">
+<meta property="og:url" content="https://waibibab-cs.github.io/post/%E3%80%90-lun-wen-yue-du-%3BSOSP%2725%E3%80%91LSM-VEC%EF%BC%9A-yi-zhong-ji-yu-ci-pan-de-dong-tai-xiang-liang-sou-suo-xi-tong.html">
+<meta property="og:image" content="https://avatars.githubusercontent.com/u/105782835?s=400&u=04c0291bd1e06b01ccad1d53388ed4a8a8894a53&v=4">
+<title>【论文阅读;SOSP'25】LSM-VEC：一种基于磁盘的动态向量搜索系统</title>
+
+
+
+</head>
+<style>
+body{box-sizing: border-box;min-width: 200px;max-width: 900px;margin: 20px auto;padding: 45px;font-size: 16px;font-family: sans-serif;line-height: 1.25;}
+#header{display:flex;padding-bottom:8px;border-bottom: 1px solid var(--borderColor-muted, var(--color-border-muted));margin-bottom: 16px;}
+#footer {margin-top:64px; text-align: center;font-size: small;}
+
+</style>
+
+<style>
+.postTitle{margin: auto 0;font-size:40px;font-weight:bold;}
+.title-right{display:flex;margin:auto 0 0 auto;}
+.title-right .circle{padding: 14px 16px;margin-right:8px;}
+#postBody{border-bottom: 1px solid var(--color-border-default);padding-bottom:36px;}
+#postBody hr{height:2px;}
+#cmButton{height:48px;margin-top:48px;}
+#comments{margin-top:64px;}
+.g-emoji{font-size:24px;}
+@media (max-width: 600px) {
+    body {padding: 8px;}
+    .postTitle{font-size:24px;}
+}
+
+</style>
+
+
+
+
+<body>
+    <div id="header">
+<h1 class="postTitle">【论文阅读;SOSP'25】LSM-VEC：一种基于磁盘的动态向量搜索系统</h1>
+<div class="title-right">
+    <a href="https://waibibab-cs.github.io" id="buttonHome" class="btn btn-invisible circle" title="首页">
+        <svg class="octicon" width="16" height="16">
+            <path id="pathHome" fill-rule="evenodd"></path>
+        </svg>
+    </a>
+    
+    <a href="https://github.com/waibibab-cs/waibibab-cs.github.io/issues/16" target="_blank" class="btn btn-invisible circle" title="Issue">
+        <svg class="octicon" width="16" height="16">
+            <path id="pathIssue" fill-rule="evenodd"></path>
+        </svg>
+    </a>
+    
+
+    <a class="btn btn-invisible circle" onclick="modeSwitch();" title="切换主题">
+        <svg class="octicon" width="16" height="16" >
+            <path id="themeSwitch" fill-rule="evenodd"></path>
+        </svg>
+    </a>
+
+</div>
+</div>
+    <div id="content">
+<div class="markdown-body" id="postBody"><p>论文全名：LSM-VEC: A Large-Scale Disk-Based System for Dynamic Vector Search</p>
+<h1>摘要</h1>
+<p>向量搜索通过支持高维嵌入上的近似最近邻（ANN）查询，构成了现代 AI 应用的基础，涵盖了检索增强生成（RAG）、推荐系统和多模态搜索等任务。传统的 ANN 搜索索引（如 HNSW）在大规模数据下受到内存限制的制约。诸如 DiskANN等基于磁盘的索引虽然降低了内存开销，但依赖于离线图构建，导致向量更新成本高昂且效率低下。目前最先进的基于聚类的方法 SPFresh提供了更好的可扩展性，但由于其粗粒度的分区方案，召回率有所下降。此外，SPFresh 采用原地更新（in-place updates）来维护索引结构，这限制了其在动态工作负载下处理高吞吐量插入和删除的效率。</p>
+<p>本文提出了 LSM-VEC，一种将层次化图索引与 LSM 树存储相结合的基于磁盘的动态向量索引。通过将邻近图分布在多个 LSM 树层级中，LSM-VEC 支持非原地（out-of-place）向量更新。它通过基于采样的概率搜索策略及自适应邻居选择来提高搜索效率，并通过感知连接性的图重排序技术在无需全局重建的情况下进一步减少了 I/O 开销。在十亿级数据集上的实验表明，LSM-VEC 的表现始终优于现有的基于磁盘的 ANN 系统。它实现了更高的召回率、更低的查询和更新延迟，并节省了超过 66.2% 的内存占用，使其非常适合具有动态更新需求的真实大规模向量搜索场景。</p>
+<h1>引言</h1>
+<p>随着检索增强生成 (RAG)、个性化推荐、机器学习和多模态搜索等 AI 驱动应用的普及，向量数据库的部署也经历了爆发式增长。向量数据库是专门用于管理和查询由大语言模型、视觉编码器及其他机器学习模型所生成的高维向量嵌入的系统。这些向量数据库严重依赖近似最近邻 (ANN) 搜索，以便在高维空间中高效检索与给定查询相近的向量，在搜索准确性与延迟之间取得平衡，从而支持实时或准实时的应用场景。</p>
+<p><strong>ANN 搜索索引</strong>。为了实现高效的 ANN 搜索，人们提出了众多的索引方法。其中，基于图的索引因其在高维空间中优异的召回率-延迟权衡（recall-latency trade-offs），已成为应用最广泛的技术。与此同时，基于树的方法深受“维度灾难”的困扰，而基于哈希的方法通常需要巨大的内存空间来维护哈希表。相比之下，基于图的索引利用向量之间的邻近关系，实现了高效的邻居探索。然而，经典的基于图的方法（如 HNSW）通常假设向量集是静态的且完全驻留在内存中。虽然这些方法适用于中等规模的数据，但在面对十亿级数据集时变得不再切合实际，因为所需的内存容量超出了成本效益的限制，特别是在云端或预算受限的环境中。</p>
+<p>因此，基于磁盘的 ANN 搜索系统在大规模部署中越来越受到关注。DiskANN 通过利用离线图构建和激进的剪枝技术，提高了磁盘访问的局部性，并最大限度地减少了搜索过程中的随机 I/O，从而将基于图的搜索扩展到了磁盘驻留数据集。然而，DiskANN 主要是为静态数据集设计的，这类数据集需要预先提供完整数据，并在离线预处理阶段对图结构进行精细优化。</p>
+<p><strong>动态向量搜索面临的挑战</strong>。现实应用中向量数据的不断涌入，推升了对动态近似最近邻（ANN）搜索索引的迫切需求。与静态数据集不同，推荐引擎、社交网络和生成式 AI 模型等现代系统要求向量数据库能够高效地处理实时插入、删除和更新。例如，亚马逊的推荐系统根据用户交互不断生成新的产品嵌入（embeddings），这需要立即将其整合进搜索索引中，以维持推荐的准确性。传统的 ANN 索引方法在应对此类动态环境时显得力不从心，因为重索引（reindexing）会带来巨大的延迟和计算开销。例如，DiskANN 要么需要昂贵的全局图重建，要么会因为新节点连接性较差而导致搜索性能下降。因此，在保持高搜索准确率和低磁盘 I/O 的同时，高效支持持续的插入、删除和不断变化的查询模式，仍然是基于磁盘的 ANN 系统所面临的关键且开放的挑战。</p>
+<p>近期的一些研究探索了支持 ANN 索引动态更新的方法。其中，最先进的解决方案 SPFresh 采用基于聚类的策略而非传统的图索引来维持增量更新。SPFresh 将向量空间划分为粗粒度的簇（clusters），并通过将新向量分配给最近的簇来支持高效的原地更新（in-place updates）。这使得系统无需全局重构即可实现快速插入和删除。然而，SPFresh 存在几个关键局限：首先，粗粒度分区引入了结构僵化（structural rigidity），导致相似向量可能落入不同的簇中，从而破坏了邻域局部性并导致召回率下降。例如，在初始索引构建后，SPFresh 的 Recall 10@10 仅为 0.75 左右，显著低于基于图的方法。其次，原地更新的设计限制了数据布局优化的灵活性，使得系统难以随时间推移优化磁盘局部性（disk locality）。</p>
+<p>本文介绍了 <strong>LSM-VEC</strong>，这是一种专为在大规模环境下实现高效动态更新和高召回率近似最近邻（ANN）搜索而设计的磁盘向量数据库。LSM-VEC 是首个引入 <strong>LSM 树</strong>（一种针对更新进行优化的知名索引结构）来支持向量索引中高效插入和删除的系统。具体而言，我们利用 **AsterDB ** （一种最先进的面向图的 LSM 树）在磁盘上维护 HNSW 邻近图，从而实现对 HNSW 结构的高效更新。LSM-VEC 进一步结合了两项关键技术来降低查询延迟：</p>
+<ol>
+<li><strong>HNSW 中的选择性邻居搜索</strong>：LSM-VEC 避免了对每个访问节点的所有邻居进行穷举评估。相反，它采用了一种概率采样策略，有选择地仅扩展一部分邻居。该技术的灵感源自近期关于概率图遍历的研究，这些研究最初是为内存 ANN 图提出的。然而，我们将这一理念扩展到了磁盘环境——在该环境下，随机 I/O 是主要的开销来源。不同于原始公式中主要开销在于计算，我们的适配方案必须明确考虑磁盘延迟和数据布局。为此，LSM-VEC 引入了一种新的成本分析模型，通过模拟跳过邻居评估所节省的 I/O，证明了即使采样率的小幅降低，也能在不显著损失召回率的情况下带来大幅的延迟优化。</li>
+<li><strong>感知采样的图重排序</strong>：LSM-VEC 采用感知采样的图重排序技术，根据查询驱动的连接性优化向量在磁盘上的放置。传统的重排序方法仅依赖于静态拓扑，而 LSM-VEC 引入了反映实际遍历模式的“基于采样的边权重”。通过将频繁遍历的边连接的向量共同存储（Co-locating），LSM-VEC 增强了磁盘局部性，并显著减少了图向量索引遍历过程中的随机 I/O 操作。</li>
+</ol>
+<h1>背景知识</h1>
+<h2>近似最近邻（ANN）搜索</h2>
+<p><a target="_blank" rel="noopener noreferrer nofollow" href="https://raw.githubusercontent.com/waibibab-cs/blog_img/main/cdnimg/20260120152642.png"><img src="https://raw.githubusercontent.com/waibibab-cs/blog_img/main/cdnimg/20260120152642.png" alt="image.png" style="max-width: 100%;"></a><br>
+近似最近邻（ANN）搜索是大规模向量检索中的一个基础性问题，它使得在检索增强生成（RAG）、推荐系统和多模态搜索等应用中进行快速的基于相似度的查询成为可能。给定一个查询向量 q∈Rd 和一个数据库 X={x1,x2,…,xn}X={x1​,x2​,…,xn​}，ANN 搜索的目标是根据预定义的距离度量，高效地检索出与 qq 最相似的向量。</p>
+<p>精确最近邻（NN）搜索问题的形式化定义如下：<br>
+<a target="_blank" rel="noopener noreferrer nofollow" href="https://raw.githubusercontent.com/waibibab-cs/blog_img/main/cdnimg/20260120155653.png"><img src="https://raw.githubusercontent.com/waibibab-cs/blog_img/main/cdnimg/20260120155653.png" alt="image.png" style="max-width: 100%;"></a><br>
+其中D(q , xi)表示相似度函数，如欧氏距离：<br>
+<a target="_blank" rel="noopener noreferrer nofollow" href="https://raw.githubusercontent.com/waibibab-cs/blog_img/main/cdnimg/20260120155726.png"><img src="https://raw.githubusercontent.com/waibibab-cs/blog_img/main/cdnimg/20260120155726.png" alt="image.png" style="max-width: 100%;"></a><br>
+由于在大规模数据集中进行精确最近邻搜索的成本极高，近似最近邻（ANN）方法通过允许返回近似结果而非绝对精确的最近邻，从而在准确性与效率之间进行权衡。<br>
+在实践中，通常使用 <strong>Recall K@K</strong> 来评估 ANN 方法的有效性。具体而言，对于给定的查询，Recall K@K 衡量了算法成功检索到的真实 K 个最近邻（ground-truth）所占的比例。形式上，其定义如下：<br>
+<a target="_blank" rel="noopener noreferrer nofollow" href="https://raw.githubusercontent.com/waibibab-cs/blog_img/main/cdnimg/20260120160153.png"><img src="https://raw.githubusercontent.com/waibibab-cs/blog_img/main/cdnimg/20260120160153.png" alt="image.png" style="max-width: 100%;"></a><br>
+其中X表示检索到的候选集，G是K个最近邻的真实集。<br>
+图 1 展示了典型的基于图的 ANN 搜索流程，它包含两个阶段：索引构建和查询处理。在<strong>构建阶段</strong>，系统根据一组数据向量 {x1,x2,…,xN}⊂RD的几何特性，构建一个基于邻近性的索引（例如图）。每个向量被表示为一个节点，并在根据选定距离度量判定为相近的向量对之间建立边。在<strong>搜索阶段</strong>，给定一个查询向量 q∈RD，系统首先通过遍历索引进行候选节点选择，随后根据距离对候选节点进行扫描和排序。最终结果返回排名靠前的候选节点，它们即代表了该查询向量的近似最近邻。</p>
+<h2>ANN搜索索引技术</h2>
+<p>在过去的十年中，学术界提出了各种 ANN 索引技术，包括基于树的方法、基于哈希的方法 以及基于图的方法。其中，基于图的方法凭借其卓越的召回率与延迟之间的权衡，已成为高维 ANN 搜索中最有效的技术。</p>
+<p><strong>HNSW</strong>。分层可导航小世界（HNSW）是一种广泛采用的内存 ANN 索引方法，它构建了一个分层的邻近图。每个向量根据指数衰减分布被随机分配到一个最大层级，且每一层都维护一个可导航的邻域结构。高层包含用于粗略遍历的长程链接，而低层则捕捉稠密的局部邻域以进行精确精化。HNSW 实现了近对数级的搜索复杂度和高召回率。然而，HNSW 假设整个图都驻留在内存（RAM）中，这使得它在内存成本极高的十亿级数据集上变得不切实际。此外，其增量插入过程需要更新多个图层，在高更新率下会导致结构失衡并导致召回率下降。这些局限性促使了基于磁盘的扩展技术的发展，旨在支持可扩展的动态工作负载，同时保留 HNSW 的搜索质量。<br>
+<a target="_blank" rel="noopener noreferrer nofollow" href="https://raw.githubusercontent.com/waibibab-cs/blog_img/main/cdnimg/20260120165706.png"><img src="https://raw.githubusercontent.com/waibibab-cs/blog_img/main/cdnimg/20260120165706.png" alt="image.png" style="max-width: 100%;"></a></p>
+<p><strong>DiskANN</strong>。DiskANN通过利用剪枝后的图索引并结合感知磁盘的（disk-aware）优化技术，使基于图的向量索引能够适配于磁盘驻留数据。它通过激进的离线剪枝和数据重排序来提高磁盘局部性（disk locality）。连接性强的邻居在磁盘上被物理靠近地放置，从而减少了随机 I/O。在查询时，DiskANN 使用感知缓存的遍历和预取策略来高效访问图的相关部分。尽管 DiskANN 显著降低了内存消耗，但它本质上仍是一种静态索引。其图结构完全在内存中构建并在部署前进行优化。插入操作仅被追加到数据集末尾，而未能妥善地整合进图结构中，这增加了遍历成本并降低了召回率。同时，它无法完全支持删除操作，随着时间的推移可能导致图结构碎片化。虽然可以进行定期的全量索引重建，但这会带来巨大的计算开销，对于动态工作负载并不实用。因此，DiskANN 在静态环境下表现良好，但在持续更新的场景下难以保持高性能。</p>
+<h2>动态向量索引</h2>
+<p>虽然许多 ANN 系统专注于优化静态索引性能，但诸如检索增强生成（RAG）和个性化搜索等新兴工作负载，对高效的动态支持有着迫切需求，即向量需要能够实时地进行持续插入和删除。</p>
+<p><strong>SPFresh</strong>。SPFresh 提出了一种基于聚类索引的截然不同的设计。SPFresh 不再维护邻近图，而是通过量化将向量组织成粗粒度的簇（cluster）。新向量被分配到其最近的簇中，从而实现快速的就地更新（in-place updates），并规避了维护图结构的开销。虽然这种设计实现了高效的插入和删除，但它面临着结构刚性的问题。相似的向量可能会被划分到不同的簇中，除非检索大量的簇，否则会损害召回率。这种局限性在数据分布不均或查询分布不断演化的场景下尤为严重。此外，该系统执行的是就地更新，这虽然简化了维护，但也限制了布局优化的空间。被分配在簇边界附近的向量可能会处于次优的物理放置位置，且 SPFresh 缺乏随时间自适应精化（refine）这些位置的机制。</p>
+<p>因此，SPFresh 以牺牲精度为代价换取了更新速度。与基于图的系统相比，其召回率较低，这使得它不太适用于那些对高精度和自适应索引有极高要求的工作负载。相比之下，我们的方法将邻近图的高召回率遍历特性与针对更新及磁盘效率优化的机制相结合，实现了可扩展的动态搜索。</p>
+<h1>动机</h1>
+<p>现有的基于磁盘的 ANN 系统在实现高召回率、支持高效更新以及保持低搜索延迟之间面临着根本性的权衡。像 DiskANN这样经典的基于图的系统，通过执行离线剪枝和布局优化实现了极高的搜索准确率，但它们假设数据集是静态的，在需要更新时会面临沉重的维护成本。为了支持动态工作负载，近年来的系统采取了不同的设计选择，但又引入了新的局限性。SPFresh采用了基于聚类的索引和就地更新（in-place updates），虽然实现了高效的存储管理，但牺牲了准确率。相比之下，FreshDiskANN保留了基于图的索引以获得更好的召回率，但在更新过程中缺乏布局精化，导致图结构随时间逐渐恶化，进而产生次优的搜索延迟。总的来说，现有的系统都未能完全解决大规模磁盘 ANN 搜索中更新效率、搜索性能和准确率这三者之间的权衡。设计一个能同时支持高召回搜索、低延迟查询处理和高效实时更新的索引，仍然是一个关键的开放性挑战。</p>
+<p>为了填补这一空白，我们提出了 <strong>LSM-VEC</strong>。这是一个集成了基于图的索引、轻量级遍历和感知存储布局优化的磁盘向量搜索系统。LSM-VEC 的一个核心设计决策是使用日志结构合并树（LSM-tree）作为底层存储架构。与传统的 B+ 树或静态文件格式不同，LSM-tree 本质上是写优化的：它们通过驻留内存的缓冲区吸收随机更新，并通过后台合并（compaction）将数据组织到顺序写入的磁盘文件中。这使其特别适合频繁插入和删除的工作负载。</p>
+<p>通过将分层基于图的向量索引与基于 LSM-tree 的存储以及感知布局的维护相结合，LSM-VEC 以极低的 I/O 开销实现了高召回率和对动态更新的鲁棒支持。在此基础上，我们进一步引入了重大的查询时优化，包括基于采样的概率搜索策略和感知连通性的图重排序。这些技术显著减少了向量搜索过程中的 I/O，使系统能够满足检索增强生成（RAG）和个性化推荐等实际应用对性能和可扩展性的要求——在这些场景下，低延迟向量检索必须与持续演进的海量数据并存。</p>
+<h1>LSM-VEC的设计</h1>
+<h2>概述</h2>
+<p><a target="_blank" rel="noopener noreferrer nofollow" href="https://raw.githubusercontent.com/waibibab-cs/blog_img/main/cdnimg/20260120161748.png"><img src="https://raw.githubusercontent.com/waibibab-cs/blog_img/main/cdnimg/20260120161748.png" alt="image.png" style="max-width: 100%;"></a><br>
+图 2 展示了 LSM-VEC 的架构全景。LSM-VEC 构建在面向图的日志结构合并树（LSM-tree）之上，为基于图的 ANN 搜索（ANNS）索引提供高效的更新和查询支持。在此基础上，我们进一步集成了三个关键模块以提升 LSM-VEC 的性能，每个模块都针由于基于磁盘的 ANN 搜索和更新所面临的具体挑战而设计。</p>
+<p><strong>基于 LSM 的分层图索引模块</strong>。该模块受分层可导航小世界（HNSW）模型的启发，采用了一种内存与磁盘混合的分层邻近图。它通过将图划分为驻留内存（memory-resident）的上层级以及由 LSM-tree 管理的驻留磁盘（disk-resident）底层级，解决了 HNSW 的可扩展性瓶颈。上层负责实现快速的长程导航，而下层则利用高效的磁盘索引和管理机制。向量存储与图索引相互解耦，从而提高了存储效率并实现了快速的磁盘向量检索。</p>
+<p><strong>基于采样的查询引擎</strong>。考虑到原始邻居探索带来的巨大计算开销，该模块实现了一种概率邻居选择机制。该引擎利用基于投影（projection-based）相似度分数的概率过滤策略，有选择性地评估邻居节点，从而显著减少了磁盘 I/O 和计算量。</p>
+<p><strong>感知连通性的重排序模块</strong>。为了最小化磁盘随机访问开销，该模块根据观察到的访问模式持续优化数据布局。与传统的静态重排序方法不同，它动态地利用来自采样查询引擎的运行时遍历统计数据。在常规的 LSM-tree 合并（compaction）过程中，经常被由于共同遍历的节点会被增量地放置在相邻的物理位置（co-located），从而增强数据局部性并减少随机磁盘 I/O。这种自适应策略专为驻留磁盘的图设计，无需进行大规模重构即可高效处理更新。</p>
+<p>总而言之，这些模块共同构成了一个集成解决方案，专门针对大规模动态 ANN 搜索工作负载的独特需求而定制。基于 LSM 的分层索引模块确保了大规模索引的高效更新与查询；基于采样的查询引擎显著降低了搜索过程中的不必要 I/O 开销；感知连通性的重排序模块则通过动态调整存储布局来最小化磁盘延迟。后续章节将提供每个模块的详细说明和性能分析。</p>
+<h2>基于LSM的邻近嵌入：动态ANN搜索的高效索引</h2>
+<p>基于磁盘的近似最近邻搜索（ANNS）在高效处理动态更新方面面临重大挑战，因为这些更新通常会导致大量的随机磁盘写入。LSM-VEC 通过将基于分层图的 ANN 搜索 与 LSM-tree 存储引擎相结合，将其扩展到大规模磁盘环境。这种设计使系统能够保持 HNSW 的高召回率和对数级查询复杂度，同时解决了在扩展到十亿级向量规模时遇到的内存限制和更新效率低下问题。HNSW 以其在效率和准确率之间的优异平衡而闻名，这得益于其分层结构：高层级便于进行高效的长程导航，而低层级则用于精确的邻域精化。然而，原始的 HNSW 设计假设整个图结构都驻留在内存中，这使其不适用于大规模磁盘场景。</p>
+<p><strong>LSM-VEC 中的存储布局</strong>。为了克服这一局限性，LSM-VEC 将 HNSW 索引分解为驻留内存的上层级和驻留磁盘的底层级。如前文图 2 所示，HNSW 的上层级保留在 RAM 中，以支持低延迟的搜索入口和快速的分层导航。根据 HNSW 等级分配中使用的指数衰减分布，上层级通常非常小。经验表明，只有不到 1% 的节点驻留在底层级的上层，这使得它们即便在十亿规模下也适合内存存储。而 HNSW 的主要层级（即底层）则存储在磁盘上，并由 LSM-tree 负责维护，从而实现高效的索引更新。由于每次向量的插入或删除都会在主要层级中产生大量新边，采用 LSM-tree 使得 LSM-VEC 能够处理这些更新而无需对整个索引进行全局重构。此外，LSM-VEC 将向量数据与图索引分开存储。所有向量都放置在一个连续的磁盘数组中，按其对应的 ID 排序。这种布局允许通过偏移量计算进行常数时间检索，避免了冗余的数据存储，同时确保向量访问和邻居遍历既高效又对写入友好。</p>
+<p><strong>LSM-VEC 中的搜索</strong>。LSM-VEC 中的搜索遵循分层遍历策略，并针对最小化随机磁盘 I/O 进行了优化。搜索过程从驻留内存的上层级开始，利用长程边高效地导航至目标区域。一旦搜索到达驻留磁盘的底层级，LSM-VEC 便采用下一节介绍的基于采样的查询引擎，有选择地探索一小部分有潜力的邻居。这种方法显著减少了不必要的磁盘访问。</p>
+<p><strong>LSM-VEC 中的插入</strong>。每个新插入的向量都遵循类 HNSW 的分层过程。系统从指数衰减分布中采样一个随机等级L分配给该向量。随后，插入操作在层级结构中自顶向下进行：在除底层外的每个层级l，系统通过内存搜索识别近似邻居，并将该向量连接到前M个最接近的节点。在底层级，邻居搜索在存储于 LSM-tree 中的磁盘驻留图上进行。向量被连接到前M个最接近的磁盘驻留节点，产生的边作为键值对写入 LSM-tree 进行持久化存储。<br>
+<a target="_blank" rel="noopener noreferrer nofollow" href="https://raw.githubusercontent.com/waibibab-cs/blog_img/main/cdnimg/20260120163016.png"><img src="https://raw.githubusercontent.com/waibibab-cs/blog_img/main/cdnimg/20260120163016.png" alt="image.png" style="max-width: 100%;"></a><br>
+图 3 展示了 LSM-VEC 底层插入过程的一个运行示例。在此例中，新向量vn​被插入到磁盘驻留图中。通过基于磁盘的最近邻搜索，LSM-VEC 识别出v4​和v5​是vn​的前M个最近邻。随后，系统在vn​与这两个节点之间建立双向链接。如该图下半部分所示，这些边被编码为键值对并插入 LSM-tree，其中键（key）代表源向量 ID，值（value）代表其邻居。所有插入操作最初都缓存在内存中，最终通过合并（compaction）传播到更深层的 LSM-tree 层级。该示例说明了 LSM-VEC 如何以较低开销将新向量整合进磁盘驻留索引中。完整的插入过程详见算法 1，其中NN(⋅)表示在内存图或磁盘驻留索引上进行的最近邻搜索。<br>
+<a target="_blank" rel="noopener noreferrer nofollow" href="https://raw.githubusercontent.com/waibibab-cs/blog_img/main/cdnimg/20260120163315.png"><img src="https://raw.githubusercontent.com/waibibab-cs/blog_img/main/cdnimg/20260120163315.png" alt="image.png" style="max-width: 100%;"></a><br>
+<strong>LSM-VEC 中的删除操作</strong>。为了支持动态向量数据库中的高效删除，LSM-VEC针对内存驻留层和磁盘驻留层均采用了一种局部邻居重连（neighbor relinking）策略。当一个向量被删除时，其直接邻居会通过近似邻居搜索进行重新连接，以维持局部图的连通性。针对磁盘层，LSM-VEC 会识别受影响的节点并将新边插入 AsterDB 中，从而避免了全量重新索引。</p>
+<p>在分层 HNSW 索引中，被删除的节点可能同时存在于内存驻留的上层和磁盘驻留的底层。LSM-VEC 确保删除操作在所有层级上能够一致地应用。在完成邻居重连后，系统将从 AsterDB 中移除所有涉及该已删除节点的边，并删除相应的向量数据。完整的删除流程详见算法 2<br>
+<a target="_blank" rel="noopener noreferrer nofollow" href="https://raw.githubusercontent.com/waibibab-cs/blog_img/main/cdnimg/20260120172202.png"><img src="https://raw.githubusercontent.com/waibibab-cs/blog_img/main/cdnimg/20260120172202.png" alt="image.png" style="max-width: 100%;"></a></p>
+<h2>采样引导的遍历：针对磁盘图的高速且稳健的搜索</h2>
+<p>在基于图的索引上实现高效的近似最近邻（ANN）搜索，其核心在于确保高召回率的同时，探索尽可能少的节点和边。传统的基于图的 ANNS 方法（如 HNSW）通常采用贪婪遍历策略，从入口点导航至目标邻域。然而，在应用于磁盘驻留场景时，简单的贪婪搜索往往需要详尽扫描节点的所有邻居以做出局部路由决策，这会产生巨大的随机 I/O 开销。为了解决这一问题，LSM-VEC 引入了一种受概率路由（probabilistic routing）启发的基于采样的过滤策略，从而实现在具有理论保证的前提下，高效剪枝（pruning）掉那些可能性较低的候选节点。</p>
+<p>基于图的 ANN 搜索中一个关键的观察是：并非所有邻居都需要以相等的概率被探索。在遍历过程中扩展节点邻居时，传统的贪婪搜索会评估所有潜在邻居，并选择距离最近的节点进行进一步扩展。然而，这种方法会导致冗余的距离计算和过多的候选评估，从而增加了查询延迟。这促使 LSM-VEC 采用了概率选择机制，该机制能根据邻居与查询向量之间的估计邻近度（proximity），动态调整每个邻居的探索概率。这种基于采样的方法在保持高召回率的同时，减少了不必要的距离计算。为了便于理解我们的系统，下文将详细介绍其采样技术</p>
+<p>在初始化阶段，系统采样m个随机投影向量 <a target="_blank" rel="noopener noreferrer nofollow" href="https://raw.githubusercontent.com/waibibab-cs/blog_img/main/cdnimg/20260120173110.png"><img src="https://raw.githubusercontent.com/waibibab-cs/blog_img/main/cdnimg/20260120173110.png" alt="image.png" style="max-width: 100%;"></a><br>
+，其中d为向量维度。每个数据向量x∈Rd都会被编码为一个二进制符号哈希码（binary sign-hash code）：<br>
+<a target="_blank" rel="noopener noreferrer nofollow" href="https://raw.githubusercontent.com/waibibab-cs/blog_img/main/cdnimg/20260120173135.png"><img src="https://raw.githubusercontent.com/waibibab-cs/blog_img/main/cdnimg/20260120173135.png" alt="image.png" style="max-width: 100%;"></a><br>
+其中，若 z≥0则 sgn(z)=1，否则为−1。这些哈希码在数据插入阶段便存储在内存中。<br>
+在查询阶段，给定查询向量q，系统会计算其哈希码，并按照下述方式将其与每个候选对象u进行对比：<br>
+<a target="_blank" rel="noopener noreferrer nofollow" href="https://raw.githubusercontent.com/waibibab-cs/blog_img/main/cdnimg/20260120173740.png"><img src="https://raw.githubusercontent.com/waibibab-cs/blog_img/main/cdnimg/20260120173740.png" alt="image.png" style="max-width: 100%;"></a><br>
+该操作用于计算匹配的哈希位数（即冲突数）。<br>
+为了确保召回率保证，系统根据霍夫丁不等式（Hoeffding’s inequality）设定了一个冲突阈值。给定目标误差ϵ和最大距离δ，冲突次数的阈值被定义为 $T^{SimHash}_ϵ$ 。在这里δ通常对应于查询向量q与当前前k个候选集中最远候选者之间的距离，作为评估新候选者的动态截断值（dynamic cutoff）。<br>
+随后，过滤条件变为：<br>
+<a target="_blank" rel="noopener noreferrer nofollow" href="https://raw.githubusercontent.com/waibibab-cs/blog_img/main/cdnimg/20260120174130.png"><img src="https://raw.githubusercontent.com/waibibab-cs/blog_img/main/cdnimg/20260120174130.png" alt="image.png" style="max-width: 100%;"></a><br>
+这使得系统能够安全地跳过哈希冲突不足的候选对象，在显著减少 I/O 的同时维持理论上的召回率保证。<br>
+通过整合查询自适应采样和误差控制的哈希过滤，LSM-VEC 在保持理论保证的同时显著加速了基于磁盘图的搜索，使其非常适合十亿级规模的 ANN 应用。<br>
+<strong>理论代价分析</strong>。为了量化采样引导遍历的有效性，我们分析并对比了应用采样前后的预期搜索代价。令T为搜索过程中访问的节点总数，d为节点的平均度数，tv为从磁盘获取单个向量所需的时间，tn为从 LSM-tree 中检索一个节点的邻居列表所需的时间。<br>
+在传统的图遍历中，每个被访问节点的所有邻居都会被评估，产生的搜索代价为：<br>
+<a target="_blank" rel="noopener noreferrer nofollow" href="https://raw.githubusercontent.com/waibibab-cs/blog_img/main/cdnimg/20260120174316.png"><img src="https://raw.githubusercontent.com/waibibab-cs/blog_img/main/cdnimg/20260120174316.png" alt="image.png" style="max-width: 100%;"></a><br>
+相比之下，LSM-VEC 引入了采样率 ρ∈(0,1]，用于控制遍历期间待访问邻居的比例。更小的ρ意味着对邻居评估进行更激进的剪枝。相应的搜索代价降低为：<br>
+<a target="_blank" rel="noopener noreferrer nofollow" href="https://raw.githubusercontent.com/waibibab-cs/blog_img/main/cdnimg/20260120174356.png"><img src="https://raw.githubusercontent.com/waibibab-cs/blog_img/main/cdnimg/20260120174356.png" alt="image.png" style="max-width: 100%;"></a><br>
+该分析表明，基于采样的搜索能有效降低向量 I/O 开销，同时保持搜索质量，特别是当采样率 ρρ 经过精心调优以平衡召回率和效率时。</p>
+<h2>局部性感知重排序：针对磁盘遍历的自适应布局优化</h2>
+<p>为了最小化磁盘驻留 ANN 搜索过程中的随机 I/O 开销，LSM-VEC 采用了一种图重排序（graph reordering）策略，以改善存储在磁盘上的向量的物理局部性（physical locality）。这一设计灵感源于此前关于离线图排序的研究，其目的是将紧密相关的节点在存储器中聚类在一起，从而加速图遍历。</p>
+<p>具体而言，现有方法通常根据静态图拓扑结构，定义两个节点u和v之间的评分函数 S(u,v)。例如，目前最先进的方法将共享入邻居（in-neighbors）的数量Ss​(u,v)与直接连接数Sn(u,v)结合，如下所示：<br>
+<a target="_blank" rel="noopener noreferrer nofollow" href="https://raw.githubusercontent.com/waibibab-cs/blog_img/main/cdnimg/20260120174710.png"><img src="https://raw.githubusercontent.com/waibibab-cs/blog_img/main/cdnimg/20260120174710.png" alt="image.png" style="max-width: 100%;"></a><br>
+其中，Ss(u,v)=∣NI(u)∩NI(v)∣用于衡量u和v共有入邻居（in-neighbors）的数量，而 Sn(u,v)则统计u和v之间是否存在直接边。这种静态公式捕捉了结构上的邻近性，但忽略了运行时的查询模式。</p>
+<p>相比之下，LSM-VEC 引入了一种专为动态 ANN 搜索定制的、本质上不同的评分定义。我们不再仅仅依赖静态图结构，而是从查询时的遍历统计数据中推导 S(u,v)。具体而言，我们定义：<br>
+<a target="_blank" rel="noopener noreferrer nofollow" href="https://raw.githubusercontent.com/waibibab-cs/blog_img/main/cdnimg/20260120174940.png"><img src="https://raw.githubusercontent.com/waibibab-cs/blog_img/main/cdnimg/20260120174940.png" alt="image.png" style="max-width: 100%;"></a><br>
+这种采样驱动的评分根据每条边在采样搜索路径中出现的频率，直接捕获其运行时重要性，从而使布局优化能够反映实际的查询行为。</p>
+<p>给定这一评分定义，LSM-VEC 旨在寻求一种节点排列 ϕ(⋅)，以实现在大小为w的物理预取窗口内总边评分的最大化，其公式定义如下：<br>
+<a target="_blank" rel="noopener noreferrer nofollow" href="https://raw.githubusercontent.com/waibibab-cs/blog_img/main/cdnimg/20260120175059.png"><img src="https://raw.githubusercontent.com/waibibab-cs/blog_img/main/cdnimg/20260120175059.png" alt="image.png" style="max-width: 100%;"></a><br>
+其中 $v_i = ϕ^{-1}(i)$ 表示存储布局中放置在位置i的节点。直观而言，这一目标促使频繁被共同访问的节点被紧密放置在一起，以便它们可以在同一个磁盘 I/O 块中被一并读取。</p>
+<p>为了实现这一目标，LSM-VEC 定期对磁盘驻留的底层图进行全局重排序（global reordering pass）。该重排序由查询采样的边热图（edge heatmap）引导，由此产生的布局能够自然地适应不断变化的查询模式，而无需预先了解完整的图结构。<br>
+<a target="_blank" rel="noopener noreferrer nofollow" href="https://raw.githubusercontent.com/waibibab-cs/blog_img/main/cdnimg/20260120175425.png"><img src="https://raw.githubusercontent.com/waibibab-cs/blog_img/main/cdnimg/20260120175425.png" alt="image.png" style="max-width: 100%;"></a><br>
+<strong>运行示例（Running Example）。</strong> 在图 4 中，我们通过一个运行示例展示了局部性感知重排序的有效性。<strong>左侧面板（原始布局）：</strong> 邻近图的节点存储在存储器中，并未考虑查询访问模式。结果，频繁遍历的节点分散在向量存储中。例如，在查询遍历路径 V1→V6→V2→V7期间，由于这些节点在物理上不连续，系统在搜索时必须执行四次随机 I/O 操作才能检索到相应的向量。<strong>右侧面板（重排序后）：</strong> 应用局部性感知重排序后，系统重新排列了向量存储，使可能被连续访问的图邻居在存储器中相邻放置。在重排序后的布局中，原本遍历 V1​,V6​,V2​ 和 V7​ 的查询被有效地转换为一条新的、经过优化的遍历路径 V1​→V3​→V5​→V7​，其中图中的相邻节点现在对应于顺序存储的向量。通过这种物理重排序，所需的随机 I/O 操作次数减少到仅两次。该示例证明了重排序如何使物理存储布局与运行时搜索路径对齐，从而提高 I/O 效率。</p>
+<p>通过将采样驱动的边权重整合到重排序决策中，并将其与 LSM 树的压缩（compaction）机制相结合，LSM-VEC 在不牺牲更新效率的情况下实现了极高的磁盘局部性。这种方法确保了索引的物理布局与逻辑查询路径保持紧密对齐，显著降低了磁盘驻留 ANN 搜索中的 I/O 开销。</p>
+<h1>相关工作</h1>
+<p><strong>内存 ANN 索引（In-Memory ANN Indexing）</strong> 基于图的 ANN 方法已成为内存中实现高精度、低延迟向量检索的主流范式。值得注意的是，HNSW引入了一种分层小世界图结构，可实现对数级搜索时间和强大的召回率保证。HNSW 的变体和扩展（包括 FAISS和 NGT中的相关实现）进一步提高了索引构建速度和图质量。然而，所有这些方法都假设索引完全驻留在内存中，这限制了它们在十亿级规模场景下的可扩展性。NSW同样使用了基于邻近性的邻域结构，但在严苛的延迟约束下，往往面临较高的内存开销或较低的召回率。</p>
+<p>除了基于图的方法外，一些内存高效的 ANN 系统还采用了其他索引范式。SCANN结合了优化的量化和学习型剪枝技术来减少内存占用并降低延迟，在内积相似度计算下实现了最先进的性能。BATL提出了一种学习型树状索引，通过神经序列预测训练的平衡划分树来实现高召回率和低延迟。PCNN采用纠错码（极化码）进行高效的高维哈希，提供了比经典 LSH 更好的权衡方案。虽然这些系统在内存环境下表现出色，但它们的扩展能力和更新效率在十亿级磁盘场景中会显著下降。</p>
+<p><strong>基于磁盘的 ANN 系统（Disk-Based ANN Systems）</strong> 为了克服内存 ANN 索引的内存限制，业界已经提出了多种基于磁盘的系统以扩展到十亿级数据集。这些方法通过优化磁盘访问并利用 SSD 友好型设计来减少内存占用。DiskANN离线构建剪枝图，并利用内存中的量化向量引导搜索，仅从磁盘加载最佳候选点。SPANN通过层次聚类划分向量空间并构建局部图，实现了高效的磁盘访问，但限制了更新的灵活性。ScaNN 在多阶段流水线中结合了量化、重排序和重排（reranking），平衡了延迟和精度，但由于重训练成本极高，它假设语料库是静态。</p>
+<p>总而言之，虽然这些系统在静态负载下表现强劲，但它们缺乏对动态更新的原生支持，限制了其在不断演进的现实部署场景中的适用性。</p>
+<p><strong>硬件加速的 ANN 系统（Hardware-accelerated ANN systems）</strong> 近期多项研究提出了基于 GPU和 FPGA的 ANN 解决方案，以加速大规模向量检索。例如，FusionANNS、BANG、RUMMY、iQAN和 ParlayANN利用 GPU 友好型流水线或 CPU-GPU 混合执行来实现低延迟的近似检索。其他系统如 DF-GAS则专门设计了基于 FPGA的基础设施，以支持十亿级 ANN 检索，并兼顾了高吞吐量与高能效。</p>
+<p>尽管具备性能优势，但这些系统本质上是为内存环境设计的。它们假设索引或其压缩形式能够完全放入高性能带宽加速器的显存中，且往往缺乏对实时更新或真正的外存数据集（out-of-core datasets，即无法一次性装入内存的大规模数据集）的支持。</p>
+<p>相比之下，LSM-VEC 解决的是十亿级磁盘 ANN 检索这一正交维度的挑战。它无需依赖专用硬件，而是通过采样引导的搜索、基于 LSM 树的索引维护和图重排序来提升系统级性能。我们的设计可与硬件加速器形成互补，未来能够集成到混合流水线中，将磁盘驻留存储与加速器查询处理相结合</p>
+<p><strong>动态与混合 ANN 索引（Dynamic and Hybrid ANN Indexing）</strong> SPFresh是近期在大规模 ANN 检索中支持动态更新的一项尝试。它没有采用图结构，而是将向量空间划分为多个聚类，并基于量化分配执行原地更新。虽然这种策略实现了高效的插入和删除，但由于聚类边界较为粗粒度，且无法保留细粒度的邻域结构，其召回率会有所下降。此外，SPFresh 没有利用图的连通性，也未采用自适应布局重排序机制。</p>
+<p>FreshDiskANN对 DiskANN 的设计进行了改进，使系统无需完全重建即可支持更新。它保留了固定的磁盘布局，通过将新向量连接到磁盘驻留的邻居来实现增量插入。对于删除操作，它采用了局部邻居重连策略：已删除节点的邻居会通过剪枝规则重新建立连接。虽然 FreshDiskANN 支持高效的插入和删除，但它并未执行任何形式的全局重排序。因此，向量的物理布局会随时间逐渐恶化，进而对 I/O 局部性和查询性能产生负面影响。</p>
+<p>近期的系统如 NV-tree和基于乘积量化（PQ）的混合索引试图将向量量化与磁盘感知索引相结合。然而，这些系统要么无法支持动态更新，要么与基于图的方法相比，检索 latency 表现不佳。</p>
+<h1>实验评估</h1>
+<h2>实验配置</h2>
+<p><strong>系统环境。</strong> 所有实验均在配有以下硬件的专用服务器上进行：</p>
+<ul>
+<li><strong>CPU:</strong> Intel(R) Xeon(R) Gold 6326 CPU @ 2.90GHz（64 核，128 线程）。</li>
+<li><strong>内存:</strong> 256 GB DDR4。</li>
+<li><strong>磁盘:</strong> 2 TB NVMe SSD。</li>
+<li><strong>操作系统:</strong> Ubuntu 20.04.4 LTS（内核版本 5.4.0-100-generic）。</li>
+</ul>
+<p>除特别说明外，所有索引均在磁盘上构建。对于每种配置，我们都会执行预热阶段，将高频访问的页面加载到内存中，随后执行 1 万次随机顺序的查询以评估延迟。每个实验重复三次并报告平均结果。</p>
+<p><strong>基准方法。</strong> 我们将 LSM-VEC 与两种具有代表性的基于磁盘的 ANN 系统进行对比：</p>
+<ul>
+<li><strong>DiskANN：</strong> 一种基于图的磁盘驻留索引。它通过离线剪枝和重排序来提升静态数据集上的搜索性能。</li>
+<li><strong>SPFresh：</strong> 一种基于聚类的动态 ANN 系统。它通过原地更新（in-place updates）实现快速插入和删除，但由于采用了粗粒度划分，牺牲了部分召回率。</li>
+</ul>
+<p>所有系统都经过调优以达到相近的召回率。索引邻居数、搜索深度和内存预算等参数均根据其开源实现及前人研究工作进行了精细选择。</p>
+<p><strong>数据集。</strong> 我们在广泛使用的 <strong>SIFT1B</strong> 数据集上进行所有实验。该数据集包含 10 亿个从图像块中提取的 128 维 SIFT 描述符。虽然 SIFT1B 是为十亿级规模评估设计的，但受硬件限制，我们在实验中使用了其 <strong>1 亿规模的子集</strong>。具体而言，像 DiskANN 这样的现有方案需要数 TB 的内存才能处理完整的 10 亿数据量，这超出了我们服务器的内存容量。这一实验设置也反映了现实场景——在实际系统中，十亿级规模的索引通常会被进行分区或分段存储。</p>
+<p><strong>评估指标。</strong> 我们评估并报告以下核心指标：</p>
+<ul>
+<li><strong>Recall 10@10：</strong> 搜索准确度。衡量每个查询的前 10 个返回结果中包含真实最近邻的比例。</li>
+<li><strong>查询延迟（Query latency）：</strong> 平均每条查询的搜索耗时，基于 100 个随机采样查询计算得出。</li>
+<li><strong>更新延迟（Update latency）：</strong> 动态负载下向量插入的平均延迟，反映了处理在线更新的效率。</li>
+<li><strong>内存占用（Memory usage）：</strong> 测量搜索和更新操作期间的峰值内存消耗，包括索引结构和图缓冲区<br>
+<strong>实现细节（Implementation Notes）。</strong> LSM-VEC 的磁盘索引是在 AsterDB基础上采用 C++ 实现的，并为图构建和查询处理提供了并发支持。对于 DiskANN和 SPFresh，我们采用了官方的开源实现，并遵循其已发表论文中的推荐设置。在所有实验中，我们均避免使用 SSD 缓存层或内存映射文件（mmap）技巧，以模拟大规模向量数据库在现实中的真实部署场景。</li>
+</ul>
+<h2>系统性能</h2>
+<p><strong>LSM-VEC 在多样化的更新场景中表现出稳健且高效的性能。</strong> 为了评估LSM-VEC在动态负载下的鲁棒性和效率，我们参考 SPFresh采用的真实动态更新模式，设计了一系列具有不同插入/删除比例的批处理负载来模拟现实更新场景。在向量数据库应用（如个性化搜索、推荐和 RAG 系统）中，向量会被频繁地插入、删除或更新，以反映不断演变的内容或用户行为。值得注意的是，更新操作通常被建模为先删除后插入。<br>
+我们构建了四种具有代表性的负载来反映不同的应用场景：</p>
+<ul>
+<li><strong>仅插入负载（Insert-only）：</strong> 100% 插入操作，模拟系统初始化或数据快速增长阶段。</li>
+<li><strong>插入密集型负载（Insert-heavy）：</strong> 70% 插入和 30% 删除，捕捉新数据频繁但偶尔需要清理的场景。</li>
+<li><strong>平衡负载（Balanced）：</strong> 50% 插入和 50% 删除，代表用户群稳定的成熟系统。</li>
+<li><strong>删除密集型负载（Delete-heavy）：</strong> 30% 插入和 70% 删除，反映数据刷新或模型重训练阶段。<br>
+<a target="_blank" rel="noopener noreferrer nofollow" href="https://raw.githubusercontent.com/waibibab-cs/blog_img/main/cdnimg/20260120213639.png"><img src="https://raw.githubusercontent.com/waibibab-cs/blog_img/main/cdnimg/20260120213639.png" alt="image.png" style="max-width: 100%;"></a><br>
+图 5 展示了这些实验的综合结果，报告了不同更新负载下的 Recall 10@10、更新延迟和搜索延迟。每个批次对应 1% 的向量更新（1% 插入或 1% 删除）。<br>
+<strong>召回率（Recall 10@10）：</strong> 在所有负载下，LSM-VEC 的表现始终优于 SPFresh 和 DiskANN。在平衡负载下，LSM-VEC 实现了 88.4% 的召回率，显著高于 SPFresh (75.5%) 和 DiskANN (82.0%)。在删除密集型负载中，由于大量删除严重影响了图质量，DiskANN 的召回率大幅下降至 61.0%，而 LSM-VEC 仍保持了 77.4% 的召回率，证明了其在动态数据演变下的鲁棒性。<br>
+<strong>更新延迟：</strong> LSM-VEC 在所有负载中具有最低的平均更新延迟。在仅插入负载中，LSM-VEC 的单向量平均更新延迟为 4.90ms，比 SPFresh (6.10ms) 快 1.2 倍，比 DiskANN (12.5ms) 快 2.6 倍。随着删除比例增加，DiskANN 的更新延迟增至 11.86ms，而 LSM-VEC 得益于基于 LSM 树的写优化设计，稳定在 4.60ms。<br>
+<strong>搜索延迟：</strong> LSM-VEC 在所有负载中始终提供最低且最稳定的平均搜索延迟。在仅插入负载中，LSM-VEC 的搜索延迟为 4.70ms，而在删除密集型负载中这一数值几乎保持不变（4.63ms）。相比之下，DiskANN 的局部性受损，搜索延迟从 8.0ms 增加到 12.0ms。SPFresh 虽然保持了相对稳定的搜索延迟（约 7ms），但这是以粗粒度聚类导致的低召回率为代价的。<br>
+总之，LSM-VEC 有效解决了动态 ANN 检索的挑战，相比 DiskANN 和 SPFresh 具有更高的召回率、更低的更新延迟和更稳定的搜索延迟，使其成为真实大规模向量数据库部署的强有力候选方案。</li>
+</ul>
+<p><a target="_blank" rel="noopener noreferrer nofollow" href="https://raw.githubusercontent.com/waibibab-cs/blog_img/main/cdnimg/20260120213725.png"><img src="https://raw.githubusercontent.com/waibibab-cs/blog_img/main/cdnimg/20260120213725.png" alt="image.png" style="max-width: 100%;"></a><br>
+<strong>LSM-VEC 在不牺牲准确性的前提下实现了更低的内存占用。</strong> 除了更新和查询性能外，内存使用是十亿级向量检索系统的关键考量。图 6 报告了所有系统在四种更新负载下随时间变化的内存消耗（包括内存索引和动态更新缓冲层）。<br>
+在仅插入负载中，DiskANN 的内存从 25GB 迅速增长到 76GB，因为所有插入的节点和图结构必须保存在内存中。相比之下，SPFresh 和 LSM-VEC 在整个运行过程中内存使用保持稳定。具体而言，LSM-VEC 从 22.4GB 增至 26.5GB，受益于紧凑的上层存储和磁盘驻留的底层图结构。即使在 100% 插入操作下，LSM-VEC 的内存曲线也保持平稳。在删除密集型负载下，LSM-VEC 同样表现出极佳的稳定性（22.4GB - 25.7GB）。相比之下，DiskANN 在动态场景中会出现严重的内存放大。这使得 LSM-VEC 特别适用于资源受限的环境。</p>
+<p><a target="_blank" rel="noopener noreferrer nofollow" href="https://raw.githubusercontent.com/waibibab-cs/blog_img/main/cdnimg/20260120213748.png"><img src="https://raw.githubusercontent.com/waibibab-cs/blog_img/main/cdnimg/20260120213748.png" alt="image.png" style="max-width: 100%;"></a><br>
+<strong>LSM-VEC 在动态负载下实现了卓越的搜索-更新平衡。</strong> 图 7 展示了召回率与延迟在查询和更新两个关键维度的权衡。在查询延迟方面，LSM-VEC 以仅 6.2ms 的延迟达到了 94.0% 的召回率。在更新延迟方面，LSM-VEC 凭借缓冲和批量处理图修改的 LSM 树设计，以 6.2ms 的更新延迟支持了 88.4% 的召回率。</p>
+<p><a target="_blank" rel="noopener noreferrer nofollow" href="https://raw.githubusercontent.com/waibibab-cs/blog_img/main/cdnimg/20260120213813.png"><img src="https://raw.githubusercontent.com/waibibab-cs/blog_img/main/cdnimg/20260120213813.png" alt="image.png" style="max-width: 100%;"></a><br>
+<strong>采样在保持检索效率的同时增强了召回率。</strong> 我们进一步评估了采样对 LSM-VEC 召回率与查询延迟之间权衡的影响。通过降低采样率，LSM-VEC 选择性地跳过部分候选邻居评估，以减少计算和磁盘 I/O。图 8 显示，当采样率从 1.0 降至 0.7 时，查询延迟从 6.81ms 显著下降至 4.72ms，而召回率仅适度从 89.2% 降至 82.4%。值得注意的是，LSM-VEC 在采样率为 <strong>0.8（红星标注）</strong> 时达到了理想平衡，仅需 4.90ms 延迟即可实现 85.1% 的召回率。相比全量评估，这在仅牺牲 4.1% 召回率的情况下减少了 30% 的延迟。采样是 LSM-VEC 的核心组件，使其能够在动态负载下实现可扩展且延迟感知的向量检索。</p>
+<h1>总结</h1>
+<p>本文介绍了 LSM-VEC，这是一个可扩展的基于磁盘的近似最近邻（ANN）系统，专为动态负载下的高召回、低延迟向量检索而设计。通过将分层邻域图索引（hierarchical proximity graph indexing）与 LSM 树存储后端相结合，LSM-VEC 在保持搜索质量的同时，支持高效的插入和删除操作。该系统进一步结合了两项关键技术：<strong>采样引导的概率遍历</strong>（sampling-guided probabilistic traversal）和<strong>连通性感知图重排序</strong>（connectivity-aware graph reordering）。这些技术通过使图布局与实际查询模式保持一致，减少了磁盘 I/O 并提升了召回率。</p>
+<p>通过在十亿级向量数据集上的广泛评估，我们证明了 LSM-VEC 在召回率、延迟、更新效率和内存占用方面，始终优于现有的先进磁盘基准系统（如 DiskANN 和 SPFresh）。我们的结果表明，LSM-VEC 是现代 AI 应用中大规模、实时向量检索的一种实用且稳健的解决方案。</p></div>
+<div style="font-size:small;margin-top:8px;float:right;"></div>
+
+<button class="btn btn-block" type="button" onclick="openComments()" id="cmButton">评论</button>
+<div class="comments" id="comments"></div>
+
+</div>
+    <div id="footer"><div id="footer1">Copyright © <span id="copyrightYear"></span> <a href="https://waibibab-cs.github.io">waibibab's blog</a></div>
+<div id="footer2">
+    <span id="runday"></span><span>Powered by <a href="https://meekdai.com/Gmeek.html" target="_blank">Gmeek</a></span>
+</div>
+
+<script>
+var now=new Date();
+document.getElementById("copyrightYear").innerHTML=now.getFullYear();
+
+if(""!=""){
+    var startSite=new Date("");
+    var diff=now.getTime()-startSite.getTime();
+    var diffDay=Math.floor(diff/(1000*60*60*24));
+    document.getElementById("runday").innerHTML="网站运行"+diffDay+"天"+" • ";
+}
+</script></div>
+</body>
+<script>
+var IconList={'sun': 'M8 10.5a2.5 2.5 0 100-5 2.5 2.5 0 000 5zM8 12a4 4 0 100-8 4 4 0 000 8zM8 0a.75.75 0 01.75.75v1.5a.75.75 0 01-1.5 0V.75A.75.75 0 018 0zm0 13a.75.75 0 01.75.75v1.5a.75.75 0 01-1.5 0v-1.5A.75.75 0 018 13zM2.343 2.343a.75.75 0 011.061 0l1.06 1.061a.75.75 0 01-1.06 1.06l-1.06-1.06a.75.75 0 010-1.06zm9.193 9.193a.75.75 0 011.06 0l1.061 1.06a.75.75 0 01-1.06 1.061l-1.061-1.06a.75.75 0 010-1.061zM16 8a.75.75 0 01-.75.75h-1.5a.75.75 0 010-1.5h1.5A.75.75 0 0116 8zM3 8a.75.75 0 01-.75.75H.75a.75.75 0 010-1.5h1.5A.75.75 0 013 8zm10.657-5.657a.75.75 0 010 1.061l-1.061 1.06a.75.75 0 11-1.06-1.06l1.06-1.06a.75.75 0 011.06 0zm-9.193 9.193a.75.75 0 010 1.06l-1.06 1.061a.75.75 0 11-1.061-1.06l1.06-1.061a.75.75 0 011.061 0z', 'moon': 'M9.598 1.591a.75.75 0 01.785-.175 7 7 0 11-8.967 8.967.75.75 0 01.961-.96 5.5 5.5 0 007.046-7.046.75.75 0 01.175-.786zm1.616 1.945a7 7 0 01-7.678 7.678 5.5 5.5 0 107.678-7.678z', 'sync': 'M1.705 8.005a.75.75 0 0 1 .834.656 5.5 5.5 0 0 0 9.592 2.97l-1.204-1.204a.25.25 0 0 1 .177-.427h3.646a.25.25 0 0 1 .25.25v3.646a.25.25 0 0 1-.427.177l-1.38-1.38A7.002 7.002 0 0 1 1.05 8.84a.75.75 0 0 1 .656-.834ZM8 2.5a5.487 5.487 0 0 0-4.131 1.869l1.204 1.204A.25.25 0 0 1 4.896 6H1.25A.25.25 0 0 1 1 5.75V2.104a.25.25 0 0 1 .427-.177l1.38 1.38A7.002 7.002 0 0 1 14.95 7.16a.75.75 0 0 1-1.49.178A5.5 5.5 0 0 0 8 2.5Z', 'home': 'M6.906.664a1.749 1.749 0 0 1 2.187 0l5.25 4.2c.415.332.657.835.657 1.367v7.019A1.75 1.75 0 0 1 13.25 15h-3.5a.75.75 0 0 1-.75-.75V9H7v5.25a.75.75 0 0 1-.75.75h-3.5A1.75 1.75 0 0 1 1 13.25V6.23c0-.531.242-1.034.657-1.366l5.25-4.2Zm1.25 1.171a.25.25 0 0 0-.312 0l-5.25 4.2a.25.25 0 0 0-.094.196v7.019c0 .138.112.25.25.25H5.5V8.25a.75.75 0 0 1 .75-.75h3.5a.75.75 0 0 1 .75.75v5.25h2.75a.25.25 0 0 0 .25-.25V6.23a.25.25 0 0 0-.094-.195Z', 'github': 'M8 0c4.42 0 8 3.58 8 8a8.013 8.013 0 0 1-5.45 7.59c-.4.08-.55-.17-.55-.38 0-.27.01-1.13.01-2.2 0-.75-.25-1.23-.54-1.48 1.78-.2 3.65-.88 3.65-3.95 0-.88-.31-1.59-.82-2.15.08-.2.36-1.02-.08-2.12 0 0-.67-.22-2.2.82-.64-.18-1.32-.27-2-.27-.68 0-1.36.09-2 .27-1.53-1.03-2.2-.82-2.2-.82-.44 1.1-.16 1.92-.08 2.12-.51.56-.82 1.28-.82 2.15 0 3.06 1.86 3.75 3.64 3.95-.23.2-.44.55-.51 1.07-.46.21-1.61.55-2.33-.66-.15-.24-.6-.83-1.23-.82-.67.01-.27.38.01.53.34.19.73.9.82 1.13.16.45.68 1.31 2.69.94 0 .67.01 1.3.01 1.49 0 .21-.15.45-.55.38A7.995 7.995 0 0 1 0 8c0-4.42 3.58-8 8-8Z'};
+var utterancesLoad=0;
+
+let themeSettings={
+    "dark": ["dark","moon","#00f0ff","dark-blue"],
+    "light": ["light","sun","#ff5000","github-light"],
+    "auto": ["auto","sync","","preferred-color-scheme"]
+};
+function changeTheme(mode, icon, color, utheme){
+    document.documentElement.setAttribute("data-color-mode",mode);
+    document.getElementById("themeSwitch").setAttribute("d",value=IconList[icon]);
+    document.getElementById("themeSwitch").parentNode.style.color=color;
+    if(utterancesLoad==1){utterancesTheme(utheme);}
+}
+function modeSwitch(){
+    let currentMode=document.documentElement.getAttribute('data-color-mode');
+    let newMode = currentMode === "light" ? "dark" : currentMode === "dark" ? "auto" : "light";
+    localStorage.setItem("meek_theme", newMode);
+    if(themeSettings[newMode]){
+        changeTheme(...themeSettings[newMode]);
+    }
+}
+function utterancesTheme(theme){
+    const message={type:'set-theme',theme: theme};
+    const iframe=document.getElementsByClassName('utterances-frame')[0];
+    iframe.contentWindow.postMessage(message,'https://utteranc.es');
+}
+if(themeSettings[theme]){changeTheme(...themeSettings[theme]);}
+console.log("\n %c Gmeek last https://github.com/Meekdai/Gmeek \n","padding:5px 0;background:#02d81d;color:#fff");
+</script>
+
+<script>
+document.getElementById("pathHome").setAttribute("d",IconList["home"]);
+document.getElementById("pathIssue").setAttribute("d",IconList["github"]);
+
+
+
+function openComments(){
+    cm=document.getElementById("comments");
+    cmButton=document.getElementById("cmButton");
+    cmButton.innerHTML="loading";
+    span=document.createElement("span");
+    span.setAttribute("class","AnimatedEllipsis");
+    cmButton.appendChild(span);
+
+    script=document.createElement("script");
+    script.setAttribute("src","https://utteranc.es/client.js");
+    script.setAttribute("repo","waibibab-cs/waibibab-cs.github.io");
+    script.setAttribute("issue-term","title");
+    
+    if(localStorage.getItem("meek_theme")=="dark"){script.setAttribute("theme","dark-blue");}
+    else if(localStorage.getItem("meek_theme")=="light") {script.setAttribute("theme","github-light");}
+    else{script.setAttribute("theme","preferred-color-scheme");}
+    
+    script.setAttribute("crossorigin","anonymous");
+    script.setAttribute("async","");
+    cm.appendChild(script);
+
+    int=self.setInterval("iFrameLoading()",200);
+}
+
+function iFrameLoading(){
+    var utterances=document.getElementsByClassName('utterances');
+    if(utterances.length==1){
+        if(utterances[0].style.height!=""){
+            utterancesLoad=1;
+            int=window.clearInterval(int);
+            document.getElementById("cmButton").style.display="none";
+            console.log("utterances Load OK");
+        }
+    }
+}
+
+
+
+</script>
+<script>MathJax = {tex: {inlineMath: [["$", "$"]]}};</script><script async src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+
+</html>
